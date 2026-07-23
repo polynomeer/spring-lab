@@ -140,16 +140,14 @@ assertThat(lbf.containsSingleton("bd1")).isFalse();   // ← bd1은 끝까지 �
 - 이름 중복 등록 검증(`DuplicateBeanDefinitionException`) — `registerSingleton`/`registerBeanDefinition` 어느 조합으로 중복돼도 감지
 - 리플렉션 실패를 감싼 전용 예외(`BeanInstantiationException`)
 - 미등록 조회 시 전용 예외(`NoSuchBeanException`)
+- **재진입 감지**(project 17 Mini Cycle Detector 선반영) — `beanCreationPath`로 현재 생성 중인 빈 이름의 경로를 추적하다가, 이미 경로에 있는 이름이 다시 요청되면 `CircularDependencyException`을 그 경로("a -> b -> a")와 함께 던진다. `SimpleBeanFactoryCircularReferenceTest.circularReferenceIsDetectedOnReentry`로 검증.
 
 **생략한 것** (다음 단계에서 다룰 대상)
 - 타입 기반 조회, 동일 타입 중복 시 예외 — 지금은 순수 이름 기반이라 8번에서 관찰한 "타입 조회는 이름 스캔을 먼저 거친다"는 구조 자체가 없다.
-- 조기 참조/순환 참조 처리 — 9번에서 확인한 "생성 전/후 조기 참조 재확인" 같은 구조가 전혀 없다.
-- **구조적 차이**: Spring은 캐시 조회(`DefaultSingletonBeanRegistry.getSingleton`)와 생성 방법(`AbstractAutowireCapableBeanFactory`)이 `ObjectFactory` 람다로 분리돼 있다(11번 참고). `SimpleBeanFactory.getBean()`은 이 둘을 한 메서드 안에 그대로 인라인했다 — 지금 규모에서는 문제없지만, BeanPostProcessor 같은 개입 지점을 나중에 추가하려면 Spring처럼 "캐시 관리"와 "생성 로직"을 분리해야 할 것이다.
+- 조기 참조를 통한 순환 참조 **해결**(9번의 setter 순환처럼 부분 완성된 참조를 주입해 주는 것) — 지금은 순환을 정확히 탐지해서 실패시킬 뿐, Spring처럼 singleton+setter 조합을 실제로 풀어주지는 못한다. project 17의 목표("해결이 아니라 탐지")와 정확히 일치한다.
+- **구조적 차이**: Spring은 캐시 조회(`DefaultSingletonBeanRegistry.getSingleton`)와 생성 방법(`AbstractAutowireCapableBeanFactory`)이 `ObjectFactory` 람다로 분리돼 있다(11번 참고). `SimpleBeanFactory`는 `getBean` → `createBean`(재진입 감지) → `instantiate`(리플렉션)로 3단계는 나눴지만, 캐시 관리와 생성 로직이 여전히 같은 클래스 안에 있다.
 
-**재진입 감지가 없다는 걸 직접 재현한 결과** ([`SimpleBeanFactoryCircularReferenceTest`](../../mini-spring/mini-container/src/test/java/lab/minispring/container/SimpleBeanFactoryCircularReferenceTest.java)) — `mini-container`는 아직 생성자 주입이 없어(project 15에서 다룸) 정적 필드에 factory를 꽂아 두고 각 빈의 생성자가 서로 `getBean()`을 호출하게 만들어 `A→B→A` singleton 순환을 흉내냈다. 결과는 예상보다 나빴다:
-- 그냥 `StackOverflowError`로 끝나지 않는다. 재귀가 `Constructor#newInstance` 경계를 한 번 지날 때마다 우리 `instantiate()`의 `catch (ReflectiveOperationException e)`가 이를 새 `BeanInstantiationException`으로 다시 감싼다.
-- 그 결과 바깥에서 잡히는 예외는 `BeanInstantiationException`이고, `getCause()`를 계속 따라가면 `BeanInstantiationException → InvocationTargetException`이 반복되며 **원인 체인 깊이가 3000단계 이상**이다 — 진단은커녕 로그에 찍기도 힘든 형태다.
-- 대조적으로 Spring은 `beansCurrentlyInCreation` 같은 상태를 먼저 확인해서 두 번째 재진입 시점에 `BeanCurrentlyInCreationException` 한 번으로 즉시 실패한다(9번의 `circularReferenceThroughAutowiring` 참고). "재진입을 감지하지 않는다"는 게 단순히 기능 부재가 아니라, **장애를 진단 불가능한 형태로 악화시킨다**는 걸 이 재현으로 확인했다.
+**재진입 감지를 추가하고 나서 드러난 함정** ([`SimpleBeanFactoryCircularReferenceTest`](../../mini-spring/mini-container/src/test/java/lab/minispring/container/SimpleBeanFactoryCircularReferenceTest.java)) — 처음 `beanCreationPath` 검사만 추가했을 때는 테스트가 실패했다. `mini-container`가 아직 생성자 주입이 없어(project 15) 정적 필드에 factory를 꽂아 두고 각 빈의 생성자가 서로 `getBean()`을 호출하게 만들어 순환을 흉내내다 보니, `CircularDependencyException`이 던져지는 지점이 `Constructor#newInstance()` 경계 **안쪽**이었다. 그러면 이전 커밋에서 본 것과 똑같은 문제가 재발한다 — `instantiate()`의 `catch (ReflectiveOperationException e)`가 그 예외를 재귀 단계마다 다시 `BeanInstantiationException`으로 감싸버려서, 탐지는 되지만 바깥에는 여전히 알아보기 힘든 형태로 도달했다. `InvocationTargetException`을 벗겨서 원인이 `RuntimeException`이면 그대로 던지도록 고치자(Spring의 `BeanUtils.instantiateClass`가 `ex.getTargetException()`을 쓰는 것과 같은 발상) 비로소 `CircularDependencyException`이 깨끗하게 표면까지 올라왔다. 실제 project 15(생성자 주입)에서는 의존성 해석이 리플렉션 호출 *이전*에 순수 Java 코드로 일어나므로 이 문제 자체가 없을 것으로 보이지만, 지금의 "생성자가 스스로 컨테이너를 되부르는" 시뮬레이션 방식에서는 반드시 마주치는 함정이었다.
 
 ## 11. Spring 설계 의도
 
