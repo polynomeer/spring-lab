@@ -110,6 +110,60 @@ class SimpleBeanFactoryTest {
                 .isInstanceOf(BeanInstantiationException.class);
     }
 
+    @Test
+    @DisplayName("registerSingleton()으로 등록한 인스턴스도 타입으로 조회할 수 있다")
+    void typeLookupReturnsRegisteredSingletonInstance() {
+        SimpleBeanFactory beanFactory = new SimpleBeanFactory();
+        PaymentService paymentService = new PaymentService();
+        beanFactory.registerSingleton("paymentService", paymentService);
+
+        assertThat(beanFactory.getBean(PaymentService.class)).isSameAs(paymentService);
+    }
+
+    @Test
+    @DisplayName("BeanDefinition으로 등록한 빈도 타입으로 조회하면 생성돼서 반환된다")
+    void typeLookupCreatesAndReturnsBeanDefinitionInstance() {
+        SimpleBeanFactory beanFactory = new SimpleBeanFactory();
+        beanFactory.registerBeanDefinition("counting", new BeanDefinition(CountingComponent.class));
+
+        CountingComponent bean = beanFactory.getBean(CountingComponent.class);
+
+        assertThat(bean).isNotNull();
+        assertThat(CountingComponent.constructorCalls).hasValue(1);
+    }
+
+    @Test
+    @DisplayName("일치하는 빈이 없으면 타입 조회는 NoSuchBeanException을 던진다")
+    void typeLookupWithNoCandidatesThrows() {
+        SimpleBeanFactory beanFactory = new SimpleBeanFactory();
+
+        assertThatThrownBy(() -> beanFactory.getBean(PaymentService.class))
+                .isInstanceOf(NoSuchBeanException.class);
+    }
+
+    @Test
+    @DisplayName("같은 타입의 빈이 여러 개면 타입 조회는 NoUniqueBeanException을 던진다")
+    void typeLookupWithMultipleCandidatesThrows() {
+        SimpleBeanFactory beanFactory = new SimpleBeanFactory();
+        beanFactory.registerSingleton("paymentServiceA", new PaymentService());
+        beanFactory.registerSingleton("paymentServiceB", new PaymentService());
+
+        assertThatThrownBy(() -> beanFactory.getBean(PaymentService.class))
+                .isInstanceOf(NoUniqueBeanException.class);
+    }
+
+    @Test
+    @DisplayName("타입 조회는 일치하지 않는 다른 BeanDefinition 후보를 생성하지 않는다")
+    void typeLookupDoesNotInstantiateNonMatchingCandidates() {
+        SimpleBeanFactory beanFactory = new SimpleBeanFactory();
+        beanFactory.registerBeanDefinition("counting", new BeanDefinition(CountingComponent.class));
+        beanFactory.registerBeanDefinition("payment", new BeanDefinition(PaymentService.class));
+
+        beanFactory.getBean(PaymentService.class);
+
+        assertThat(CountingComponent.constructorCalls).hasValue(0);
+    }
+
     private static class PaymentService {
     }
 

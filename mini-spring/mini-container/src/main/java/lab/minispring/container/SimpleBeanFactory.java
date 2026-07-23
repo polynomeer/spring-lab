@@ -5,8 +5,10 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class SimpleBeanFactory {
@@ -49,8 +51,47 @@ public final class SimpleBeanFactory {
         return created;
     }
 
+    public <T> T getBean(Class<T> type) {
+        List<String> matches = new ArrayList<>();
+        for (String name : allRegisteredNames()) {
+            if (matchesType(name, type)) {
+                matches.add(name);
+            }
+        }
+
+        if (matches.isEmpty()) {
+            throw new NoSuchBeanException(type);
+        }
+        if (matches.size() > 1) {
+            throw new NoUniqueBeanException(type, matches);
+        }
+
+        return type.cast(getBean(matches.get(0)));
+    }
+
     public boolean containsBean(String name) {
         return singletonObjects.containsKey(name) || beanDefinitionMap.containsKey(name);
+    }
+
+    private Set<String> allRegisteredNames() {
+        Set<String> names = new LinkedHashSet<>(singletonObjects.keySet());
+        names.addAll(beanDefinitionMap.keySet());
+        return names;
+    }
+
+    private boolean matchesType(String name, Class<?> type) {
+        // An already-realized instance is checked directly (isInstance) so that
+        // registerSingleton()-registered objects - which have no BeanDefinition/beanClass
+        // metadata at all - are still matchable. A not-yet-created BeanDefinition is
+        // checked against its declared beanClass instead of being instantiated just to
+        // find out its type (see docs/01-ioc-container/bean-factory-getbean.md section 9's
+        // getBeanByTypeWithPrimary finding).
+        Object existing = singletonObjects.get(name);
+        if (existing != null) {
+            return type.isInstance(existing);
+        }
+        BeanDefinition definition = beanDefinitionMap.get(name);
+        return definition != null && type.isAssignableFrom(definition.beanClass());
     }
 
     private void requireUnregistered(String name) {
