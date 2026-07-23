@@ -131,17 +131,20 @@ assertThat(lbf.containsSingleton("bd1")).isFalse();   // ← bd1은 끝까지 �
 
 ## 10. 축소 구현 (구현한 것 / 생략한 것)
 
-[`mini-spring/mini-container`](../../mini-spring/mini-container) — 프로젝트 2의 1단계(인스턴스 저장 방식)까지만 구현됐다.
+[`mini-spring/mini-container`](../../mini-spring/mini-container) — 프로젝트 2의 1단계(인스턴스 저장 방식)에 이어 2단계(`BeanDefinition` 도입)·3단계(지연 생성)까지 구현됐다. 2단계만 따로는 테스트할 게 없어(등록해도 소비하는 로직이 없음) 3단계와 함께 진행했다.
 
 **구현한 것**
-- 이름 기반 등록(`registerSingleton`)과 조회(`getBean(String)`)
-- `containsBean(String)`
+- 이름 기반 등록(`registerSingleton`)과 조회(`getBean(String)`), `containsBean(String)`
+- `BeanDefinition`(`beanClass`, `Scope`) 등록 — 등록 시점에는 인스턴스를 만들지 않고 최초 `getBean()` 호출 때 리플렉션으로 생성 (`beanDefinitionIsNotInstantiatedUntilFirstGetBean` 테스트로 생성자 호출 횟수를 직접 세어 검증)
+- `SINGLETON`/`PROTOTYPE` scope — 싱글턴은 최초 생성 후 캐시, prototype은 매번 새 인스턴스
+- 이름 중복 등록 검증(`DuplicateBeanDefinitionException`) — `registerSingleton`/`registerBeanDefinition` 어느 조합으로 중복돼도 감지
+- 리플렉션 실패를 감싼 전용 예외(`BeanInstantiationException`)
 - 미등록 조회 시 전용 예외(`NoSuchBeanException`)
 
 **생략한 것** (다음 단계에서 다룰 대상)
-- `BeanDefinition` 자체가 없음 — 인스턴스를 직접 등록해야 하며, 클래스만 등록해 두고 지연 생성하는 방식이 아니다.
-- 리플렉션 기반 생성, prototype scope, 타입 기반 조회, 동일 타입 중복 검증
-- 조기 참조/순환 참조 처리 — 이번 관찰(8번)에서 확인한 "생성 전/후 조기 참조 재확인" 같은 구조가 전혀 없다.
+- 타입 기반 조회, 동일 타입 중복 시 예외 — 지금은 순수 이름 기반이라 8번에서 관찰한 "타입 조회는 이름 스캔을 먼저 거친다"는 구조 자체가 없다.
+- 조기 참조/순환 참조 처리 — 9번에서 확인한 "생성 전/후 조기 참조 재확인" 같은 구조가 전혀 없어서, 지금 이 축소 구현으로 `A→B→A` 형태의 singleton+setter 순환 참조를 시도하면 무한 재귀에 빠진다(재진입 감지 자체가 없음).
+- **구조적 차이**: Spring은 캐시 조회(`DefaultSingletonBeanRegistry.getSingleton`)와 생성 방법(`AbstractAutowireCapableBeanFactory`)이 `ObjectFactory` 람다로 분리돼 있다(11번 참고). `SimpleBeanFactory.getBean()`은 이 둘을 한 메서드 안에 그대로 인라인했다 — 지금 규모에서는 문제없지만, BeanPostProcessor 같은 개입 지점을 나중에 추가하려면 Spring처럼 "캐시 관리"와 "생성 로직"을 분리해야 할 것이다.
 
 ## 11. Spring 설계 의도
 
