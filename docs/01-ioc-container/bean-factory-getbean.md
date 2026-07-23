@@ -103,7 +103,31 @@ lab.experiments.ioc.PaymentService#pay
 
 ## 9. 공식 테스트 분석
 
-**미완료.** `docs/plan/00-methodology.md`의 버전 고정 절차대로 `spring-framework` 소스 저장소(`v6.2.x` 태그)를 아직 로컬에 clone하지 않아, `DefaultListableBeanFactoryTests` 같은 공식 테스트를 실제로 읽지 못했다. 이번 주차 안에 저장소를 내려받아 `DefaultListableBeanFactoryTests`, `AbstractBeanFactoryTests`에서 `getBean(Class)`와 `getSingleton` 관련 테스트 메서드를 찾아 이 절을 보완해야 한다.
+`spring-framework` 저장소를 `v6.2.19` 태그로 shallow clone해서(`/Users/hammac/Study/spring-framework-src`, 이 랩 저장소 밖에 별도로 둠 — git 이력에는 포함하지 않음) 확인했다.
+
+**타입 조회 예외 케이스** — `spring-beans/src/test/java/org/springframework/beans/factory/DefaultListableBeanFactoryTests.java`
+- `getBeanByTypeWithNoneFound()`: 후보가 없으면 `NoSuchBeanDefinitionException` — 8번에서 확인한 미등록 예외와 정확히 같은 케이스다.
+- `getBeanByTypeWithAmbiguity()`: 같은 타입의 `BeanDefinition`이 두 개면 `NoUniqueBeanDefinitionException` — `BeanFactoryLabTest.typeLookupFailsWhenMultipleCandidatesExist()`와 동일한 시나리오를 공식 테스트가 그대로 검증하고 있다.
+
+**타입 스캔이 인스턴스를 강제로 만들지 않는다는 근거** — `getBeanByTypeWithPrimary()`:
+```java
+RootBeanDefinition bd1 = new RootBeanDefinition(TestBean.class);
+bd1.setLazyInit(true);                    // bd1은 lazy, 후보에는 포함되지만 즉시 만들어지면 안 됨
+RootBeanDefinition bd2 = new RootBeanDefinition(TestBean.class);
+bd2.setPrimary(true);                     // bd2가 @Primary
+...
+TestBean bean = lbf.getBean(TestBean.class);
+assertThat(bean.getBeanName()).isEqualTo("bd2");
+assertThat(lbf.containsSingleton("bd1")).isFalse();   // ← bd1은 끝까지 인스턴스화되지 않았다
+```
+이 마지막 단언이 8번에서 관찰한 히트 1(`getBeanNamesForType` → `isTypeMatch` → `getSingleton(name, false)`)의 설계 의도를 정확히 증명한다: 타입 후보를 찾는 단계는 **타입 메타데이터만으로 판단**하고, 후보가 아닌(lazy·non-primary) 빈은 실제로 생성하지 않는다.
+
+**조기 참조 체크가 왜 "항상" 실행되는지** — 같은 파일의 순환 참조 테스트 세 개를 비교하면 이유가 드러난다.
+- `extensiveCircularReference()`: 1000개의 빈이 **프로퍼티(setter) 참조**로 원형을 이루는데도 `preInstantiateSingletons()`가 성공한다 — setter 주입은 조기 노출된 미완성 참조를 나중에 다시 주입받아도 문제가 없기 때문이다.
+- `circularReferenceThroughAutowiring()`: **생성자** 자동와이어링으로 자기 자신을 필요로 하면 `UnsatisfiedDependencyException`이 발생한다 — 생성자 인자는 조기 노출된 참조로 대체할 수 없다(객체가 아직 존재하지 않으므로).
+- `prototypeCircleLeadsToException()`: **prototype** 스코프의 순환 참조는 `BeanCreationException`(원인은 `BeanCurrentlyInCreationException`) — prototype은 캐시 슬롯이 없어 조기 노출 자체가 불가능하다.
+
+즉 히트 4/11에서 본 조기 참조 체크는 "이번엔 순환이 있는지" 미리 판단해서 조건부로 켜는 게 아니라, **모든 singleton 생성이 거치는 동일한 경로**이기 때문에 항상 실행된다 — 이 절 초입에서 확인한 것과 일치한다. 다만 그 체크가 실제로 순환을 "해결"해 주는 것은 setter/property 주입 조합뿐이고, 생성자 주입과 prototype 스코프에서는 여전히 예외로 끝난다는 것이 공식 테스트로 확인된 새로운 사실이다.
 
 ## 10. 축소 구현 (구현한 것 / 생략한 것)
 
@@ -128,5 +152,5 @@ lab.experiments.ioc.PaymentService#pay
 ## 12. 결론 (예상과 실제의 차이)
 
 - 예상과 다르게, `getBean(Class)`는 `getBean(String)`의 단순 wrapper가 아니라 **먼저 후보 이름을 찾는 별도의 스캔 단계**(`getBeanNamesForType`)를 거친 뒤에야 이름 기반 경로로 들어간다.
-- 예상과 다르게, 순환 참조가 전혀 없는 단일 빈 생성에서도 **조기 참조 체크(`allowEarlyReference`)가 생성 전/후 두 번 실행**된다 — 순환 참조 처리는 특수 분기가 아니라 모든 싱글턴 생성이 지나가는 공통 경로다.
-- 아직 열린 질문: 공식 테스트 분석(9번)이 비어 있다. 다음 작업으로 `spring-framework` 소스를 clone해서 이 절을 보완하는 것이 좋다.
+- 예상과 다르게, 순환 참조가 전혀 없는 단일 빈 생성에서도 **조기 참조 체크(`allowEarlyReference`)가 생성 전/후 두 번 실행**된다 — 순환 참조 처리는 특수 분기가 아니라 모든 싱글턴 생성이 지나가는 공통 경로이며, 공식 테스트(`extensiveCircularReference` vs `circularReferenceThroughAutowiring` vs `prototypeCircleLeadsToException`)로 그 체크가 실제로 순환을 해결해 주는 조합은 "singleton + setter/property 주입"뿐이라는 것도 확인했다.
+- 새로 열린 질문: `getBeanByTypeWithPrimary`처럼 후보가 여러 개일 때 `@Primary`/우선순위 판정이 어떤 순서로 이뤄지는지는 9주차(생성자 주입과 의존성 탐색)·10주차(`@Primary`, `@Qualifier`) 주제에서 더 깊이 다룬다.
