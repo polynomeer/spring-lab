@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-This repository is currently empty of source code (no build configuration, no commits). It is a learning lab for exploring Spring Framework internals — how the container works under the hood (bean creation/lifecycle, AOP proxies, transaction management, `DispatcherServlet` request handling, etc.) by reading the official docs/source alongside Spring, then reimplementing the core abstractions in reduced form, rather than just using Spring as a black box.
+This is a learning lab for exploring Spring Framework internals — how the container works under the hood (bean creation/lifecycle, AOP proxies, transaction management, `DispatcherServlet` request handling, etc.) by reading the official docs/source alongside Spring, then reimplementing the core abstractions in reduced form, rather than just using Spring as a black box.
 
 The full study plan lives in `docs/plan/`:
 - [`docs/plan/00-methodology.md`](docs/plan/00-methodology.md) — the read → minimal example → interface → debug → test → reduced-implementation cycle, version pinning (Java 21 / Spring Boot 3.x / Spring Framework 6.2.x), source-reading rules, and the per-topic doc template.
@@ -13,7 +13,7 @@ The full study plan lives in `docs/plan/`:
 
 ## Directory convention
 
-Once code is scaffolded, keep it split by role rather than one monolithic app:
+Code is split by role rather than one monolithic app. Each leaf directory is its own Gradle subproject (`experiments:ioc-container-lab`, `mini-spring:mini-container`, ...), declared in `settings.gradle.kts`:
 ```text
 experiments/       # real Spring used to verify/probe actual behavior
 mini-spring/       # reduced from-scratch implementations of Spring's core abstractions
@@ -22,7 +22,21 @@ sample-app/        # integrated application combining what's been learned
 docs/<NN>-<topic>/ # per-topic analysis doc + diagrams, written per the template in docs/plan/00-methodology.md
 ```
 
-No build tool or module layout (Gradle/Maven, single vs. multi-module, Java/Kotlin) has been chosen yet. When the first module is scaffolded, add build/test/run commands here (including how to run a single test).
+Adding a new project from the catalog: create the directory under the right role, add it to `settings.gradle.kts`, add a `build.gradle.kts` only if it needs dependencies beyond what `build.gradle.kts` (root) already applies to all subprojects (Java 21 toolchain, JUnit 5, AssertJ).
+
+## Build / test
+
+Stack: Java 21, Gradle (Kotlin DSL), JUnit 5 + AssertJ. `mini-spring` modules have no Spring dependency by design; `experiments` and `spring-extensions` modules depend on `org.springframework:spring-context` (currently 6.2.19).
+
+```bash
+./gradlew build                                                              # build + test everything
+./gradlew :experiments:ioc-container-lab:test                                 # test a single module
+./gradlew :mini-spring:mini-container:test --tests "*SimpleBeanFactoryTest"    # a single test class
+```
+
+Modules don't apply the `application` plugin, so `main()` classes (e.g. `BeanFactoryLab`) are run from the IDE, not via a `./gradlew run` task.
+
+If `./gradlew` picks the wrong JDK (this machine's default `gradle`/`java` on `PATH` may be a newer JDK than 21), point `JAVA_HOME` at a JDK 21 install before invoking it.
 
 ## Commit convention
 
