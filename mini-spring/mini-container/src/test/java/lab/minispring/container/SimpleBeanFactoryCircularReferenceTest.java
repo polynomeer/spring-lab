@@ -4,22 +4,18 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * SimpleBeanFactory has no "currently in creation" guard (see docs/01-ioc-container/bean-factory-getbean.md,
- * section 10). This reproduces the consequence of a singleton-to-singleton circular
- * reference with nothing to catch it.
- *
- * mini-container can't do constructor injection yet (that's project 15), so the
- * circularity is faked by stashing the factory in a static field and having each
- * bean's own constructor call back into getBean() for the other.
+ * mini-container can't do constructor injection yet (that's project 15), so circularity
+ * is faked by stashing the factory in a static field and having each bean's own
+ * constructor call back into getBean() for the other.
  */
 class SimpleBeanFactoryCircularReferenceTest {
 
     @Test
-    @DisplayName("재진입 감지가 없으면 StackOverflowError가 재귀 단계마다 다시 감싸여 원인 체인이 수천 단계로 쌓인다")
-    void circularReferenceWithNoReentryGuardBuriesTheRootCause() {
+    @DisplayName("순환 참조를 재진입 시점에 CircularDependencyException으로 즉시 감지한다")
+    void circularReferenceIsDetectedOnReentry() {
         SimpleBeanFactory beanFactory = new SimpleBeanFactory();
         CircularA.factory = beanFactory;
         CircularB.factory = beanFactory;
@@ -27,27 +23,23 @@ class SimpleBeanFactoryCircularReferenceTest {
         beanFactory.registerBeanDefinition("a", new BeanDefinition(CircularA.class));
         beanFactory.registerBeanDefinition("b", new BeanDefinition(CircularB.class));
 
-        // getBean() 자체가 StackOverflowError를 던지는 게 아니다: 재귀 호출이 Constructor#newInstance
-        // 경계를 거칠 때마다 BeanInstantiationException으로 다시 감싸이기 때문에, 바깥에서 보이는
-        // 최종 예외는 그 재래핑이 반복된 결과다.
-        Throwable outermost = catchThrowable(() -> beanFactory.getBean("a"));
+        assertThatThrownBy(() -> beanFactory.getBean("a"))
+                .isInstanceOf(CircularDependencyException.class)
+                .hasMessageContaining("a -> b -> a");
+    }
 
-        assertThat(outermost).isInstanceOf(BeanInstantiationException.class);
+    @Test
+    @DisplayName("순환이 아닌 의존 체인은 재진입 감지에 걸리지 않고 정상 생성된다")
+    void nonCircularChainStillResolves() {
+        SimpleBeanFactory beanFactory = new SimpleBeanFactory();
+        ChainRoot.factory = beanFactory;
 
-        int depth = 0;
-        Throwable cursor = outermost;
-        Throwable rootCause = outermost;
-        while (cursor != null) {
-            depth++;
-            rootCause = cursor;
-            cursor = cursor.getCause();
-        }
+        beanFactory.registerBeanDefinition("leaf", new BeanDefinition(ChainLeaf.class));
+        beanFactory.registerBeanDefinition("root", new BeanDefinition(ChainRoot.class));
 
-        // Spring의 BeanCurrentlyInCreationException(9번 참고)은 재진입을 즉시 감지해 한 단계 만에
-        // 실패한다. 여기서는 재진입 감지가 아예 없어서 스택이 바닥날 때까지 계속 재귀한다 —
-        // 원인 체인 깊이가 수백~수천에 달하는 게 그 증거다.
-        assertThat(depth).isGreaterThan(100);
-        assertThat(rootCause).isInstanceOf(StackOverflowError.class);
+        ChainRoot root = (ChainRoot) beanFactory.getBean("root");
+
+        assertThat(root.leaf).isNotNull();
     }
 
     private static class CircularA {
@@ -67,6 +59,18 @@ class SimpleBeanFactoryCircularReferenceTest {
 
         CircularB() {
             this.a = (CircularA) factory.getBean("a");
+        }
+    }
+
+    private static class ChainLeaf {
+    }
+
+    private static class ChainRoot {
+        static SimpleBeanFactory factory;
+        final ChainLeaf leaf;
+
+        ChainRoot() {
+            this.leaf = (ChainLeaf) factory.getBean("leaf");
         }
     }
 }
