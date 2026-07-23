@@ -1,0 +1,6 @@
+# getBean() pipeline for experiments/ioc-container-lab's BeanFactoryLab.
+# See docs/plan/01-roadmap.md (4주차) for why these methods matter.
+org.springframework.beans.factory.support.AbstractBeanFactory#doGetBean
+org.springframework.beans.factory.support.DefaultSingletonBeanRegistry#getSingleton
+org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory#createBean,doCreateBean,createBeanInstance,populateBean,initializeBean
+lab.experiments.ioc.PaymentService#pay

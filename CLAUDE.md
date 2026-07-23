@@ -19,6 +19,7 @@ experiments/       # real Spring used to verify/probe actual behavior
 mini-spring/       # reduced from-scratch implementations of Spring's core abstractions
 spring-extensions/ # code that uses Spring's real extension points (BFPP, BPP, ArgumentResolver, AutoConfiguration, ...)
 sample-app/        # integrated application combining what's been learned
+tools/             # reusable dev tooling for the lab itself (e.g. tools/jdi-tracer, see below)
 docs/<NN>-<topic>/ # per-topic analysis doc + diagrams, written per the template in docs/plan/00-methodology.md
 ```
 
@@ -34,9 +35,21 @@ Stack: Java 21, Gradle (Kotlin DSL), JUnit 5 + AssertJ. `mini-spring` modules ha
 ./gradlew :mini-spring:mini-container:test --tests "*SimpleBeanFactoryTest"    # a single test class
 ```
 
-Modules don't apply the `application` plugin, so `main()` classes (e.g. `BeanFactoryLab`) are run from the IDE, not via a `./gradlew run` task.
+`experiments`/`mini-spring`/`spring-extensions`/`sample-app` modules don't apply the `application` plugin, so their `main()` classes (e.g. `BeanFactoryLab`) are run from the IDE, not via a `./gradlew run` task.
 
 If `./gradlew` picks the wrong JDK (this machine's default `gradle`/`java` on `PATH` may be a newer JDK than 21), point `JAVA_HOME` at a JDK 21 install before invoking it.
+
+## Debugging (tools/jdi-tracer)
+
+The methodology's "디버깅" step (see `docs/plan/00-methodology.md`) means setting breakpoints on specific Spring internal methods and watching the call stack. Piping scripted input into `jdb` does **not** reliably work here — breakpoint hits and stdin commands aren't synchronized when stdin isn't a real TTY, so `cont`/`where` run before the target VM has actually stopped.
+
+`tools/jdi-tracer` is a small JDI-based (`com.sun.jdi`, the same API IntelliJ's debugger uses) driver that launches a target `main()` class as a child JVM, sets breakpoints on given `Class#method` targets, and prints the stack + visible locals on every hit, then resumes — deterministically, no race. Breakpoint specs are `fully.qualified.ClassName#method1,method2`, either passed as CLI args or listed one-per-line in a spec file (see `tools/jdi-tracer/specs/bean-factory-lab.txt` for an example tied to `BeanFactoryLab`).
+
+```bash
+./gradlew -q :tools:jdi-tracer:run --args="\"<target-runtime-classpath>\" <target.MainClass> <specFile-or-inline-spec>..."
+```
+
+The target's runtime classpath isn't resolved automatically — get it once per module, e.g. via a throwaway Gradle task that prints `sourceSets.main.runtimeClasspath.asPath`, or by locating the resolved jars under `~/.gradle/caches/modules-2`.
 
 ## Commit convention
 
