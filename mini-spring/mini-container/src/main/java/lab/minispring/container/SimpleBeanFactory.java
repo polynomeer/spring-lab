@@ -21,6 +21,8 @@ public final class SimpleBeanFactory {
 
     private final Deque<String> beanCreationPath = new ArrayDeque<>();
 
+    private final List<BeanPostProcessor> beanPostProcessors = new ArrayList<>();
+
     public void registerSingleton(String name, Object bean) {
         requireUnregistered(name);
         singletonObjects.put(name, bean);
@@ -29,6 +31,19 @@ public final class SimpleBeanFactory {
     public void registerBeanDefinition(String name, BeanDefinition definition) {
         requireUnregistered(name);
         beanDefinitionMap.put(name, definition);
+    }
+
+    public void addBeanPostProcessor(BeanPostProcessor beanPostProcessor) {
+        beanPostProcessors.add(beanPostProcessor);
+    }
+
+    public void destroySingletons() {
+        for (Object bean : singletonObjects.values()) {
+            if (bean instanceof DisposableBean disposableBean) {
+                disposableBean.destroy();
+            }
+        }
+        singletonObjects.clear();
     }
 
     public Object getBean(String name) {
@@ -107,10 +122,35 @@ public final class SimpleBeanFactory {
 
         beanCreationPath.addLast(name);
         try {
-            return instantiate(name, definition);
+            Object bean = instantiate(name, definition);
+            populateBean(name, bean, definition);
+            return initializeBean(name, bean);
         } finally {
             beanCreationPath.removeLast();
         }
+    }
+
+    private void populateBean(String name, Object bean, BeanDefinition definition) {
+        // 의존성 주입은 아직 없다 - project 15(Mini Constructor Injector)에서 채울 자리.
+        // 생성(instantiate)과 초기화(initializeBean) 사이에 이 단계가 분리되어 있다는
+        // 파이프라인 모양 자체가 이번 주제의 핵심이라 빈 상태로라도 남겨 둔다.
+    }
+
+    private Object initializeBean(String name, Object bean) {
+        Object wrapped = bean;
+        for (BeanPostProcessor processor : beanPostProcessors) {
+            wrapped = processor.postProcessBeforeInitialization(wrapped, name);
+        }
+
+        if (wrapped instanceof InitializingBean initializingBean) {
+            initializingBean.afterPropertiesSet();
+        }
+
+        for (BeanPostProcessor processor : beanPostProcessors) {
+            wrapped = processor.postProcessAfterInitialization(wrapped, name);
+        }
+
+        return wrapped;
     }
 
     private String describePath(String reenteredName) {
