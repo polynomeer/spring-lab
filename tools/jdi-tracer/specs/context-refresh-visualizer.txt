@@ -1,0 +1,3 @@
+# AbstractApplicationContext#refresh()'s 12 phases, for experiments/context-refresh-visualizer.
+# See docs/03-context-refresh/context-refresh.md section 6/7.
+org.springframework.context.support.AbstractApplicationContext#refresh,prepareRefresh,obtainFreshBeanFactory,prepareBeanFactory,postProcessBeanFactory,invokeBeanFactoryPostProcessors,registerBeanPostProcessors,initMessageSource,initApplicationEventMulticaster,onRefresh,registerListeners,finishBeanFactoryInitialization,finishRefresh

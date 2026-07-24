@@ -68,15 +68,17 @@ prepareRefresh → obtainFreshBeanFactory → prepareBeanFactory → postProcess
 
 ## 7. 브레이크포인트
 
-이번 주제는 `tools/jdi-tracer`로 직접 추적하지 않고, 로그 기반 관찰(8번)과 소스 코드 확인(9번)으로만 검증했다. 다음은 다음 세션의 추적 후보로 남겨둔다.
+[`tools/jdi-tracer/specs/context-refresh-visualizer.txt`](../../tools/jdi-tracer/specs/context-refresh-visualizer.txt)로 `refresh()`의 12단계 전부에 브레이크포인트를 걸고 `ContextRefreshVisualizerLab`을 실행했다.
 
 ```text
-org.springframework.context.support.AbstractApplicationContext#refresh
-org.springframework.context.support.AbstractApplicationContext#invokeBeanFactoryPostProcessors
-org.springframework.context.support.AbstractApplicationContext#finishBeanFactoryInitialization
-org.springframework.context.support.AbstractApplicationContext#finishRefresh
-org.springframework.context.support.AbstractApplicationContext#publishEvent
+org.springframework.context.support.AbstractApplicationContext#refresh,prepareRefresh,obtainFreshBeanFactory,prepareBeanFactory,postProcessBeanFactory,invokeBeanFactoryPostProcessors,registerBeanPostProcessors,initMessageSource,initApplicationEventMulticaster,onRefresh,registerListeners,finishBeanFactoryInitialization,finishRefresh
 ```
+
+```bash
+./gradlew -q :tools:jdi-tracer:run --args="\"<context-refresh-visualizer 런타임 classpath>\" lab.experiments.refresh.ContextRefreshVisualizerLab specs/context-refresh-visualizer.txt"
+```
+
+13개 브레이크포인트(`refresh` + 12단계) 전부 정확히 문서화된 순서 그대로 한 번씩 히트했다 — 로그로 추론했던 6번의 흐름이 실제 호출 스택으로도 그대로 확인됐다. `prepareBeanFactory`/`postProcessBeanFactory`/`invokeBeanFactoryPostProcessors`/`registerBeanPostProcessors`/`finishBeanFactoryInitialization`에서만 `beanFactory`(`DefaultListableBeanFactory`) 지역 변수가 보였고, 나머지 단계(`prepareRefresh`, `initMessageSource`, `initApplicationEventMulticaster`, `onRefresh`, `registerListeners`, `finishRefresh`)는 브레이크포인트 진입 라인 시점에 지역 변수가 아직 없었다.
 
 ## 8. 런타임 관찰
 
@@ -153,4 +155,5 @@ void eventClassWithPayloadTypeOnParentContext() {
 - 예상과 달랐던 것: `AnnotationConfigApplicationContext`는 `refresh()`를 한 번만 허용한다 — "컨텍스트를 다시 초기화"하는 건 컨텍스트 종류(XML 기반 vs `Generic`)에 따라 아예 불가능할 수 있다.
 - 예상과 달랐던 것: 초기화 실패 후의 에러 메시지가 실패 사실을 직접 언급하지 않는다 — 상태 플래그가 단순화된 대가.
 - 예상 밖의 발견: 자식 컨텍스트의 이벤트가 부모의 리스너까지 전파된다(단방향).
-- 새로 열린 질문: `tools/jdi-tracer`로 `refresh()`의 12단계를 실제로 브레이크포인트 찍어 보지는 않았다(7번) — 이번엔 로그와 소스 읽기로만 확인했다. 다음은 4주차(빈 생성과 생명주기, 프로젝트 6 Bean Lifecycle Recorder)로 이어져 `@PostConstruct`/`InitializingBean`/`@PreDestroy`까지 포함한 전체 콜백 순서를 다룬다.
+- `tools/jdi-tracer`로 `refresh()`의 12단계 전부에 브레이크포인트를 걸어 6번의 흐름을 실제 호출 스택으로 재확인했다(7번) — 로그 기반 추론과 실제 디버깅 결과가 정확히 일치했다.
+- 다음은 4주차(빈 생성과 생명주기, 프로젝트 6 Bean Lifecycle Recorder)로 이어져 `@PostConstruct`/`InitializingBean`/`@PreDestroy`까지 포함한 전체 콜백 순서를 다룬다.
