@@ -39,7 +39,8 @@ spring-internals-lab/
 | 7 | Mini Bean Lifecycle Pipeline | 완료 — 별도 모듈 대신 project 2의 `mini-container`를 확장 | [`mini-spring/mini-container`](../../mini-spring/mini-container) |
 | 8 | Configuration Property Rewriter | 완료 | [`spring-extensions/configuration-property-rewriter`](../../spring-extensions/configuration-property-rewriter) |
 | 9 | Method Timing BeanPostProcessor | 1단계(JDK Dynamic Proxy)만 완료 — 2~4단계(`ProxyFactory`/`Pointcut`+`Advisor`/자동 프록시 생성기 비교)는 11~12주차로 미룸 | [`spring-extensions/method-timing-post-processor`](../../spring-extensions/method-timing-post-processor) |
-| 10~32 | — | 미착수 | — |
+| 10 | Mini Component Scanner | 완료 | [`mini-spring/mini-component-scan`](../../mini-spring/mini-component-scan) |
+| 11~32 | — | 미착수 | — |
 
 각 프로젝트의 분석 과정과 발견한 내용은 대응하는 `docs/<NN>-<topic>/` 문서에 있다 — [`01-roadmap.md`](./01-roadmap.md)의 진행 상황 표에서 링크를 따라간다.
 

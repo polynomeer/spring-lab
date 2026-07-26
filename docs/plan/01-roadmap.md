@@ -34,7 +34,8 @@
 | 4 | 빈 생성과 생명주기 | 완료 | [`04-bean-lifecycle/bean-lifecycle.md`](../04-bean-lifecycle/bean-lifecycle.md) |
 | 5 | BeanFactoryPostProcessor | 완료 (프로젝트 9는 1단계까지 — 나머지 3단계는 11~12주차로 미룸) | [`05-beanfactory-postprocessor/beanfactory-postprocessor.md`](../05-beanfactory-postprocessor/beanfactory-postprocessor.md) |
 | 6 | BeanPostProcessor | 완료 (새 실험 없이 4·5주차 종합 + `getEarlyBeanReference` 소스 분석) | [`06-beanpostprocessor/beanpostprocessor.md`](../06-beanpostprocessor/beanpostprocessor.md) |
-| 7~20 | 컴포넌트 스캔 이후 | 미착수 | — |
+| 7 | 컴포넌트 스캔 | 완료 | [`07-component-scan/component-scan.md`](../07-component-scan/component-scan.md) |
+| 8~20 | `@Configuration`과 `@Bean` 이후 | 미착수 | — |
 
 구체적으로 어떤 프로젝트가 끝났는지는 [`02-project-catalog.md`](./02-project-catalog.md)의 진행 상황 표를 참고한다.
 
