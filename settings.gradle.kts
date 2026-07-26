@@ -6,6 +6,7 @@ include(
     "experiments:context-refresh-visualizer",
     "experiments:bean-lifecycle-recorder",
     "experiments:configuration-proxy-lab",
+    "experiments:dependency-resolution-matrix",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
