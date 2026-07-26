@@ -13,6 +13,7 @@ include(
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
     "mini-spring:mini-aop",
+    "mini-spring:mini-auto-proxy",
     "spring-extensions:configuration-property-rewriter",
     "spring-extensions:method-timing-post-processor",
     "tools:jdi-tracer",
