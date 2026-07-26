@@ -2,6 +2,7 @@ package lab.minispring.container;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -160,6 +161,10 @@ public final class SimpleBeanFactory {
     }
 
     private Object instantiate(String name, BeanDefinition definition) {
+        if (definition.hasFactoryMethod()) {
+            return instantiateViaFactoryMethod(name, definition);
+        }
+
         try {
             Constructor<?> constructor = definition.beanClass().getDeclaredConstructor();
             constructor.setAccessible(true);
@@ -176,5 +181,46 @@ public final class SimpleBeanFactory {
         } catch (ReflectiveOperationException e) {
             throw new BeanInstantiationException(name, definition.beanClass(), e);
         }
+    }
+
+    private Object instantiateViaFactoryMethod(String name, BeanDefinition definition) {
+        // 정적 팩토리 메서드(factoryBeanName 없음)는 project 13 범위 밖이다 - MiniBean 메서드는
+        // 항상 설정 클래스의 인스턴스 메서드로만 다룬다.
+        Object factoryBean = getBean(definition.factoryBeanName());
+        Method method = findFactoryMethod(name, factoryBean.getClass(), definition.factoryMethodName());
+
+        Object[] arguments = resolveArguments(method);
+        try {
+            method.setAccessible(true);
+            return method.invoke(factoryBean, arguments);
+        } catch (InvocationTargetException e) {
+            if (e.getCause() instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new BeanInstantiationException(name, definition.beanClass(), e.getCause());
+        } catch (ReflectiveOperationException e) {
+            throw new BeanInstantiationException(name, definition.beanClass(), e);
+        }
+    }
+
+    private Method findFactoryMethod(String name, Class<?> factoryClass, String methodName) {
+        for (Method method : factoryClass.getDeclaredMethods()) {
+            if (method.getName().equals(methodName)) {
+                return method;
+            }
+        }
+        throw new BeanInstantiationException(name, factoryClass,
+                new NoSuchMethodException(factoryClass.getName() + "#" + methodName));
+    }
+
+    private Object[] resolveArguments(Method method) {
+        // 각 파라미터 타입을 getBean(Class)로 해석한다 - 순환 참조가 있으면 beanCreationPath
+        // 재진입 감지가 그대로 걸린다(createBean을 감싸는 기존 가드를 재사용).
+        Class<?>[] parameterTypes = method.getParameterTypes();
+        Object[] arguments = new Object[parameterTypes.length];
+        for (int i = 0; i < parameterTypes.length; i++) {
+            arguments[i] = getBean(parameterTypes[i]);
+        }
+        return arguments;
     }
 }
