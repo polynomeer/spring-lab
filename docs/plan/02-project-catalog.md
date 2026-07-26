@@ -38,7 +38,7 @@ spring-internals-lab/
 | 6 | Bean Lifecycle Recorder | 완료 | [`experiments/bean-lifecycle-recorder`](../../experiments/bean-lifecycle-recorder) |
 | 7 | Mini Bean Lifecycle Pipeline | 완료 — 별도 모듈 대신 project 2의 `mini-container`를 확장 | [`mini-spring/mini-container`](../../mini-spring/mini-container) |
 | 8 | Configuration Property Rewriter | 완료 | [`spring-extensions/configuration-property-rewriter`](../../spring-extensions/configuration-property-rewriter) |
-| 9 | Method Timing BeanPostProcessor | 1단계(JDK Dynamic Proxy)만 완료 — 2~4단계(`ProxyFactory`/`Pointcut`+`Advisor`/자동 프록시 생성기 비교)는 11~12주차로 미룸 | [`spring-extensions/method-timing-post-processor`](../../spring-extensions/method-timing-post-processor) |
+| 9 | Method Timing BeanPostProcessor | 완료 — 2~4단계(ProxyFactory/Pointcut+Advisor/자동 프록시 생성기 비교)까지 마무리 | [`spring-extensions/method-timing-post-processor`](../../spring-extensions/method-timing-post-processor) |
 | 10 | Mini Component Scanner | 완료 | [`mini-spring/mini-component-scan`](../../mini-spring/mini-component-scan) |
 | 11 | Plugin Auto Discovery | 미착수 | — |
 | 12 | Configuration Proxy Experiment | 완료 | [`experiments/configuration-proxy-lab`](../../experiments/configuration-proxy-lab) |
@@ -49,7 +49,8 @@ spring-internals-lab/
 | 17 | Mini Cycle Detector | 완료 (4주차에서 선반영) | [`mini-spring/mini-container`](../../mini-spring/mini-container) |
 | 18 | Proxy Playground | 완료 | [`experiments/proxy-playground`](../../experiments/proxy-playground) |
 | 19 | Mini AOP Framework | 완료 — JDK Dynamic Proxy 기반만 구현, CGLIB 상당 서브클래스 프록시는 범위 밖 | [`mini-spring/mini-aop`](../../mini-spring/mini-aop) |
-| 20~32 | — | 미착수 | — |
+| 20 | Annotation-Based Auto Proxy Creator | 완료 | [`mini-spring/mini-auto-proxy`](../../mini-spring/mini-auto-proxy) |
+| 21~32 | — | 미착수 | — |
 
 각 프로젝트의 분석 과정과 발견한 내용은 대응하는 `docs/<NN>-<topic>/` 문서에 있다 — [`01-roadmap.md`](./01-roadmap.md)의 진행 상황 표에서 링크를 따라간다.
 
