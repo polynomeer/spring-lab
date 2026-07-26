@@ -5,6 +5,7 @@ include(
     "experiments:bean-definition-inspector",
     "experiments:context-refresh-visualizer",
     "experiments:bean-lifecycle-recorder",
+    "experiments:configuration-proxy-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "spring-extensions:configuration-property-rewriter",
