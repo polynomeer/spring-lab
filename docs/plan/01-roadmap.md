@@ -36,7 +36,8 @@
 | 6 | BeanPostProcessor | 완료 (새 실험 없이 4·5주차 종합 + `getEarlyBeanReference` 소스 분석) | [`06-beanpostprocessor/beanpostprocessor.md`](../06-beanpostprocessor/beanpostprocessor.md) |
 | 7 | 컴포넌트 스캔 | 완료 | [`07-component-scan/component-scan.md`](../07-component-scan/component-scan.md) |
 | 8 | `@Configuration`과 `@Bean` | 완료 | [`08-configuration-bean/configuration-bean.md`](../08-configuration-bean/configuration-bean.md) |
-| 9~20 | 의존성 주입 이후 | 미착수 | — |
+| 9 | 생성자 주입과 의존성 탐색 | 코드 완료, 문서 작성 전 | — |
+| 10~20 | `@Primary`, `@Qualifier`와 순환 참조 이후 | 미착수 | — |
 
 구체적으로 어떤 프로젝트가 끝났는지는 [`02-project-catalog.md`](./02-project-catalog.md)의 진행 상황 표를 참고한다.
 
