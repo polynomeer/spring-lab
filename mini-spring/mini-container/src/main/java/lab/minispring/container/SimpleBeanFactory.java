@@ -1,8 +1,10 @@
 package lab.minispring.container;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -79,10 +81,28 @@ public final class SimpleBeanFactory {
             throw new NoSuchBeanException(type);
         }
         if (matches.size() > 1) {
+            String primaryMatch = findPrimaryCandidate(matches);
+            if (primaryMatch != null) {
+                return type.cast(getBean(primaryMatch));
+            }
             throw new NoUniqueBeanException(type, matches);
         }
 
         return type.cast(getBean(matches.get(0)));
+    }
+
+    private String findPrimaryCandidate(List<String> names) {
+        String primaryName = null;
+        for (String name : names) {
+            BeanDefinition definition = beanDefinitionMap.get(name);
+            if (definition != null && definition.primary()) {
+                if (primaryName != null) {
+                    return null;
+                }
+                primaryName = name;
+            }
+        }
+        return primaryName;
     }
 
     public boolean containsBean(String name) {
@@ -132,9 +152,10 @@ public final class SimpleBeanFactory {
     }
 
     private void populateBean(String name, Object bean, BeanDefinition definition) {
-        // 의존성 주입은 아직 없다 - project 15(Mini Constructor Injector)에서 채울 자리.
-        // 생성(instantiate)과 초기화(initializeBean) 사이에 이 단계가 분리되어 있다는
-        // 파이프라인 모양 자체가 이번 주제의 핵심이라 빈 상태로라도 남겨 둔다.
+        // 생성자 주입(project 15)은 instantiate() 단계에서 이미 끝난다 - 필드/세터 주입은
+        // 아직 없어서 이 단계는 여전히 비어 있다. 생성(instantiate)과 초기화(initializeBean)
+        // 사이에 이 단계가 분리되어 있다는 파이프라인 모양 자체가 4주차의 핵심이라 빈
+        // 상태로라도 남겨 둔다.
     }
 
     private Object initializeBean(String name, Object bean) {
@@ -165,15 +186,16 @@ public final class SimpleBeanFactory {
             return instantiateViaFactoryMethod(name, definition);
         }
 
+        Constructor<?> constructor = selectConstructor(name, definition.beanClass());
+        Object[] arguments = resolveArguments(constructor);
         try {
-            Constructor<?> constructor = definition.beanClass().getDeclaredConstructor();
             constructor.setAccessible(true);
-            return constructor.newInstance();
+            return constructor.newInstance(arguments);
         } catch (InvocationTargetException e) {
-            // A constructor that itself calls back into this factory (no constructor
-            // injection yet, see project 15) can throw one of our own container
-            // exceptions from inside newInstance(). Let it propagate as-is instead of
-            // burying it under a fresh BeanInstantiationException at every recursion level.
+            // A constructor that itself calls back into this factory can throw one of
+            // our own container exceptions from inside newInstance(). Let it propagate
+            // as-is instead of burying it under a fresh BeanInstantiationException at
+            // every recursion level.
             if (e.getCause() instanceof RuntimeException runtimeException) {
                 throw runtimeException;
             }
@@ -181,6 +203,41 @@ public final class SimpleBeanFactory {
         } catch (ReflectiveOperationException e) {
             throw new BeanInstantiationException(name, definition.beanClass(), e);
         }
+    }
+
+    private Constructor<?> selectConstructor(String name, Class<?> beanClass) {
+        Constructor<?>[] constructors = beanClass.getDeclaredConstructors();
+        if (constructors.length == 1) {
+            // 생성자가 하나뿐이면 @MiniAutowired 없이도 그 생성자가 선택된다.
+            return constructors[0];
+        }
+
+        List<Constructor<?>> autowired = new ArrayList<>();
+        Constructor<?> noArgConstructor = null;
+        for (Constructor<?> constructor : constructors) {
+            if (constructor.isAnnotationPresent(MiniAutowired.class)) {
+                autowired.add(constructor);
+            } else if (constructor.getParameterCount() == 0) {
+                noArgConstructor = constructor;
+            }
+        }
+
+        if (autowired.size() > 1) {
+            throw new AmbiguousConstructorException(name, beanClass,
+                    "multiple constructors annotated with @MiniAutowired");
+        }
+        if (autowired.size() == 1) {
+            return autowired.get(0);
+        }
+        if (noArgConstructor != null) {
+            // 생성자가 여럿인데 @MiniAutowired가 하나도 없으면 기본 생성자로 떨어진다 -
+            // 나머지 생성자의 파라미터는 무시된다. 실제 Spring의
+            // determineCandidateConstructors()도 이 경우 후보를 정하지 못하고 일반
+            // 인스턴스화 경로로 넘긴다(9주차 문서 참고).
+            return noArgConstructor;
+        }
+        throw new AmbiguousConstructorException(name, beanClass,
+                "multiple constructors with no @MiniAutowired and no no-arg fallback");
     }
 
     private Object instantiateViaFactoryMethod(String name, BeanDefinition definition) {
@@ -213,14 +270,23 @@ public final class SimpleBeanFactory {
                 new NoSuchMethodException(factoryClass.getName() + "#" + methodName));
     }
 
-    private Object[] resolveArguments(Method method) {
-        // 각 파라미터 타입을 getBean(Class)로 해석한다 - 순환 참조가 있으면 beanCreationPath
-        // 재진입 감지가 그대로 걸린다(createBean을 감싸는 기존 가드를 재사용).
-        Class<?>[] parameterTypes = method.getParameterTypes();
-        Object[] arguments = new Object[parameterTypes.length];
-        for (int i = 0; i < parameterTypes.length; i++) {
-            arguments[i] = getBean(parameterTypes[i]);
+    private Object[] resolveArguments(Executable executable) {
+        // 각 파라미터를 해석한다 - @MiniQualifier가 있으면 이름으로, 없으면 타입으로
+        // getBean()을 호출한다. 순환 참조가 있으면 beanCreationPath 재진입 감지가 그대로
+        // 걸린다(createBean을 감싸는 기존 가드를 재사용).
+        Parameter[] parameters = executable.getParameters();
+        Object[] arguments = new Object[parameters.length];
+        for (int i = 0; i < parameters.length; i++) {
+            arguments[i] = resolveArgument(parameters[i]);
         }
         return arguments;
+    }
+
+    private Object resolveArgument(Parameter parameter) {
+        MiniQualifier qualifier = parameter.getAnnotation(MiniQualifier.class);
+        if (qualifier != null) {
+            return getBean(qualifier.value());
+        }
+        return getBean(parameter.getType());
     }
 }

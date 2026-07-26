@@ -101,12 +101,25 @@ class SimpleBeanFactoryTest {
     }
 
     @Test
-    @DisplayName("기본 생성자가 없는 빈은 BeanInstantiationException이 발생한다")
-    void beanWithoutNoArgConstructorThrowsBeanInstantiationException() {
+    @DisplayName("생성자 파라미터를 해석할 빈이 없으면 NoSuchBeanException이 발생한다")
+    void unresolvableConstructorParameterThrowsNoSuchBeanException() {
+        // 단일 생성자는 project 15(생성자 주입)부터 자동으로 선택된다 - String 파라미터를
+        // 해석하려다 등록된 String 빈이 없어서 실패한다. (이전에는 무조건 기본 생성자만
+        // 찾다가 실패했지만, 지금은 실제로 파라미터를 해석하려고 시도한다.)
         SimpleBeanFactory beanFactory = new SimpleBeanFactory();
         beanFactory.registerBeanDefinition("noDefaultCtor", new BeanDefinition(NoDefaultConstructorComponent.class));
 
         assertThatThrownBy(() -> beanFactory.getBean("noDefaultCtor"))
+                .isInstanceOf(NoSuchBeanException.class);
+    }
+
+    @Test
+    @DisplayName("리플렉션으로 만들 수 없는 클래스(추상 클래스)는 BeanInstantiationException이 발생한다")
+    void trulyUninstantiableClassThrowsBeanInstantiationException() {
+        SimpleBeanFactory beanFactory = new SimpleBeanFactory();
+        beanFactory.registerBeanDefinition("abstractComponent", new BeanDefinition(AbstractComponent.class));
+
+        assertThatThrownBy(() -> beanFactory.getBean("abstractComponent"))
                 .isInstanceOf(BeanInstantiationException.class);
     }
 
@@ -180,5 +193,8 @@ class SimpleBeanFactoryTest {
 
         NoDefaultConstructorComponent(String requiredArgument) {
         }
+    }
+
+    private abstract static class AbstractComponent {
     }
 }
