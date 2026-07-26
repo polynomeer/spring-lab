@@ -22,8 +22,26 @@ spring-internals-lab/
 ├── experiments/       # 실제 Spring으로 동작을 검증하는 코드
 ├── mini-spring/       # Spring 기능을 축소 구현하는 코드
 ├── spring-extensions/ # Spring 확장 포인트를 사용하는 코드
-└── sample-app/        # 학습한 기능을 종합 적용하는 애플리케이션
+├── sample-app/        # 학습한 기능을 종합 적용하는 애플리케이션
+└── tools/             # jdi-tracer 등 학습용 도구
 ```
+
+## 진행 상황
+
+| # | 프로젝트 | 상태 | 코드 |
+| --- | --- | --- | --- |
+| 1 | 수동 IoC 컨테이너 실험 | 완료 | [`experiments/ioc-container-lab`](../../experiments/ioc-container-lab) |
+| 2 | Mini BeanFactory | 완료 — 1~3단계 + 타입 기반 조회 + 순환 참조 탐지까지 확장 | [`mini-spring/mini-container`](../../mini-spring/mini-container) |
+| 3 | BeanDefinition Registry Inspector | 완료 | [`experiments/bean-definition-inspector`](../../experiments/bean-definition-inspector) |
+| 4 | 동적 빈 등록기 | 미착수 | — |
+| 5 | Context Refresh Visualizer | 완료 | [`experiments/context-refresh-visualizer`](../../experiments/context-refresh-visualizer) |
+| 6 | Bean Lifecycle Recorder | 완료 | [`experiments/bean-lifecycle-recorder`](../../experiments/bean-lifecycle-recorder) |
+| 7 | Mini Bean Lifecycle Pipeline | 완료 — 별도 모듈 대신 project 2의 `mini-container`를 확장 | [`mini-spring/mini-container`](../../mini-spring/mini-container) |
+| 8 | Configuration Property Rewriter | 완료 | [`spring-extensions/configuration-property-rewriter`](../../spring-extensions/configuration-property-rewriter) |
+| 9 | Method Timing BeanPostProcessor | 1단계(JDK Dynamic Proxy)만 완료 — 2~4단계(`ProxyFactory`/`Pointcut`+`Advisor`/자동 프록시 생성기 비교)는 11~12주차로 미룸 | [`spring-extensions/method-timing-post-processor`](../../spring-extensions/method-timing-post-processor) |
+| 10~32 | — | 미착수 | — |
+
+각 프로젝트의 분석 과정과 발견한 내용은 대응하는 `docs/<NN>-<topic>/` 문서에 있다 — [`01-roadmap.md`](./01-roadmap.md)의 진행 상황 표에서 링크를 따라간다.
 
 ------
 

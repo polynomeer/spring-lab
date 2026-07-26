@@ -23,6 +23,21 @@
 - 총 16주 + 선택 4주 (Spring Boot 내부)
 - 주당 8~10시간 (평일 1시간 × 4일, 주말 4~6시간)
 
+## 진행 상황
+
+| 주차 | 주제 | 상태 | 문서 |
+| --- | --- | --- | --- |
+| 0 | 환경 구성 | 부분 완료 — `spring-framework-src`는 clone만 함(직접 빌드는 안 함), IntelliJ 대신 `tools/jdi-tracer`로 브레이크포인트 확인 | — |
+| 1 | IoC와 BeanFactory | 완료 | [`01-ioc-container/bean-factory-getbean.md`](../01-ioc-container/bean-factory-getbean.md) |
+| 2 | BeanDefinition과 빈 등록 | 완료 (프로젝트 4는 미착수) | [`02-bean-definition/bean-definition-registration.md`](../02-bean-definition/bean-definition-registration.md) |
+| 3 | ApplicationContext.refresh() | 완료 | [`03-context-refresh/context-refresh.md`](../03-context-refresh/context-refresh.md) |
+| 4 | 빈 생성과 생명주기 | 완료 | [`04-bean-lifecycle/bean-lifecycle.md`](../04-bean-lifecycle/bean-lifecycle.md) |
+| 5 | BeanFactoryPostProcessor | 완료 (프로젝트 9는 1단계까지 — 나머지 3단계는 11~12주차로 미룸) | [`05-beanfactory-postprocessor/beanfactory-postprocessor.md`](../05-beanfactory-postprocessor/beanfactory-postprocessor.md) |
+| 6 | BeanPostProcessor | 완료 (새 실험 없이 4·5주차 종합 + `getEarlyBeanReference` 소스 분석) | [`06-beanpostprocessor/beanpostprocessor.md`](../06-beanpostprocessor/beanpostprocessor.md) |
+| 7~20 | 컴포넌트 스캔 이후 | 미착수 | — |
+
+구체적으로 어떤 프로젝트가 끝났는지는 [`02-project-catalog.md`](./02-project-catalog.md)의 진행 상황 표를 참고한다.
+
 ## 0주차: 환경 구성
 
 버전 고정은 [`00-methodology.md`](./00-methodology.md#버전-고정)를 따른다.
