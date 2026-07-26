@@ -1,6 +1,6 @@
 # BeanFactoryPostProcessor — BeanDefinition을 고치는 시점과 그 시점이 갈리는 이유
 
-[`docs/plan/01-roadmap.md`](../plan/01-roadmap.md) 5주차, [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md) 프로젝트 8(Configuration Property Rewriter)에 대응하는 분석 문서다.
+[`docs/plan/01-roadmap.md`](../plan/01-roadmap.md) 5주차, [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md) 프로젝트 8(Configuration Property Rewriter)에 대응하는 분석 문서다. 카탈로그가 "5. BeanFactoryPostProcessor와 BeanPostProcessor"로 두 프로젝트를 묶어 두었으므로, 프로젝트 9(Method Timing BeanPostProcessor) 1단계 결과도 13번에 이어 붙였다.
 
 ## 1. 이번 질문
 
@@ -134,3 +134,53 @@ PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, g
 - 이 문제는 사전 설계가 아니라 **실제로 겪은 버그**를 통해 발견했다 — `docs/plan/00-methodology.md`의 순환("최소 예제 → 실행 → 관찰")이 문서를 쓰기 전부터 이미 효과가 있었던 사례다.
 - 예상대로였던 것: registry 구조가 확정된 뒤에만 동작하는 나머지 6개 실험(scope/lazy/property/primary/role/타입 해석)은 등록 방법과 무관하게 처음부터 안정적으로 동작했다 — 이 차이가 "구조 변경"과 "메타데이터 수정"을 굳이 다른 인터페이스로 나눈 이유(11번)를 몸으로 확인시켜 준 셈이다.
 - 새로 열린 질문: `mini-container`에 `BeanFactoryPostProcessor`를 추가할 때, 이번에 겪은 "등록 시점 vs 실행 시점" 문제까지 재현할지는 아직 정하지 않았다.
+
+------
+
+## 13. 추가 실험: BeanPostProcessor로 빈 자체를 교체하기 (프로젝트 9, 1단계)
+
+`BeanFactoryPostProcessor`가 "정의(BeanDefinition)"를 고치는 지점이라면, `BeanPostProcessor`는 "생성된 인스턴스"에 개입하는 지점이다 — 5주차 로드맵이 처음부터 강조한 구분이다. [`spring-extensions/method-timing-post-processor`](../../spring-extensions/method-timing-post-processor)에서 이 구분을 가장 극단적인 형태로 확인했다: `BeanPostProcessor`는 인스턴스를 "고치는" 정도가 아니라 **완전히 다른 객체로 통째로 교체**할 수 있다.
+
+### 최소 재현 코드
+
+```java
+@Override
+public Object postProcessAfterInitialization(Object bean, String beanName) {
+    Class<?>[] interfaces = bean.getClass().getInterfaces();
+    if (interfaces.length == 0 || !anyMethodAnnotated(interfaces)) {
+        return bean;
+    }
+    return Proxy.newProxyInstance(
+            bean.getClass().getClassLoader(), interfaces, new TimingInvocationHandler(bean));
+}
+```
+
+`@MeasureTime`이 붙은 인터페이스 메서드가 있으면 원본 대신 `java.lang.reflect.Proxy`를 반환한다 — 컨테이너의 싱글턴 캐시에 최종적으로 저장되는 객체가 `OrderServiceImpl`이 아니라 그 프록시다.
+
+### 실제로 확인한 것
+
+- `context.getBean(OrderService.class)`가 반환한 객체는 `Proxy.isProxyClass(...)`가 `true`이고 `OrderServiceImpl`의 인스턴스가 **아니다**.
+- `@MeasureTime`이 붙은 메서드(`placeOrder`)만 측정 로그에 남고, 같은 인터페이스의 다른 메서드(`cachedLookup`)는 정상 동작하지만 측정되지 않는다.
+- `@MeasureTime`은 **구현 클래스가 아니라 인터페이스 메서드**에 붙여야 한다 — JDK 동적 프록시는 인터페이스의 `Method` 객체로 디스패치하므로, 구현체 오버라이드에만 애노테이션이 있으면 `InvocationHandler`가 절대 볼 수 없다. 처음에 이 사실을 모르고 짰다면 조용히 아무것도 측정되지 않았을 것이다.
+- 인터페이스가 없는 `LegacyReport`는 `@MeasureTime`이 붙어 있어도 JDK 프록시로 감쌀 수 없다 — 원본 그대로 통과하고 아무것도 측정되지 않는다. 이 한계가 왜 Spring이 (인터페이스가 없을 때) CGLIB로 넘어가는지의 실질적인 이유다.
+
+### 공식 소스와의 연결
+
+이 패턴이 장난감 단순화가 아니라는 근거를 실제 Spring AOP 코어에서 찾았다 — `spring-aop`의 `AbstractAutoProxyCreator`(`@Transactional`, `@Async`, `@Aspect` 전부를 가능하게 하는 클래스)도 정확히 같은 지점에서 같은 일을 한다.
+```java
+// org.springframework.aop.framework.autoproxy.AbstractAutoProxyCreator
+public Object postProcessAfterInitialization(@Nullable Object bean, String beanName) {
+    if (bean != null) {
+        Object cacheKey = getCacheKey(bean.getClass(), beanName);
+        if (this.earlyBeanReferences.remove(cacheKey) != bean) {
+            return wrapIfNecessary(bean, beanName, cacheKey);
+        }
+    }
+    return bean;
+}
+```
+`wrapIfNecessary()`가 (JDK 프록시 또는 CGLIB로) 조건에 맞는 빈을 프록시로 감싸 돌려준다는 점에서 우리 `MethodTimingBeanPostProcessor`와 구조가 동일하다 — 카탈로그가 이 프로젝트의 학습 포인트로 제시한 "AOP가 IoC 컨테이너 위에서 동작하는 이유"에 대한 직접적인 답이다: **Spring AOP는 별도의 특별한 메커니즘이 아니라, `BeanPostProcessor`라는 이미 있는 확장 지점 하나를 활용해서 구현된 기능**이다.
+
+### 남겨둔 것
+
+카탈로그는 이 프로젝트를 4단계로 제시한다: JDK Dynamic Proxy(완료) → Spring `ProxyFactory` → `Pointcut`+`Advisor` → 자동 프록시 생성기(`AbstractAutoProxyCreator`)와 비교. 나머지 3단계는 11~12주차(Spring AOP)에서 `ProxyFactory`/`Pointcut`/`Advisor`/`AbstractAutoProxyCreator`를 제대로 다룰 때 이어간다 — 지금 서두르면 이번 주제(BeanFactoryPostProcessor vs BeanPostProcessor의 시점 차이)의 초점이 흐려진다.
