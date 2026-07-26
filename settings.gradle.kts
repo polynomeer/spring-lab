@@ -7,5 +7,6 @@ include(
     "experiments:bean-lifecycle-recorder",
     "mini-spring:mini-container",
     "spring-extensions:configuration-property-rewriter",
+    "spring-extensions:method-timing-post-processor",
     "tools:jdi-tracer",
 )
