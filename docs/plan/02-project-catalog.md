@@ -45,7 +45,9 @@ spring-internals-lab/
 | 13 | Mini Java Config Parser | 완료 | [`mini-spring/mini-java-config`](../../mini-spring/mini-java-config) |
 | 14 | Dependency Resolution Matrix | 완료 | [`experiments/dependency-resolution-matrix`](../../experiments/dependency-resolution-matrix) |
 | 15 | Mini Constructor Injector | 완료 — Optional/List/ObjectProvider 형태(4단계)는 미룸 | [`mini-spring/mini-container`](../../mini-spring/mini-container) |
-| 16~32 | — | 미착수 | — |
+| 16 | Circular Dependency Laboratory | 완료 | [`experiments/circular-dependency-lab`](../../experiments/circular-dependency-lab) |
+| 17 | Mini Cycle Detector | 완료 (4주차에서 선반영) | [`mini-spring/mini-container`](../../mini-spring/mini-container) |
+| 18~32 | — | 미착수 | — |
 
 각 프로젝트의 분석 과정과 발견한 내용은 대응하는 `docs/<NN>-<topic>/` 문서에 있다 — [`01-roadmap.md`](./01-roadmap.md)의 진행 상황 표에서 링크를 따라간다.
 
