@@ -8,4 +8,8 @@ public interface OrderService {
     void placeOrder();
 
     String cachedLookup();
+
+    // 애노테이션이 없다 - 내부에서 placeOrder()를 this로 호출하는지, 프록시를 거쳐
+    // 호출하는지에 따라 측정 여부가 갈리는 것을 보여주기 위한 진입점이다.
+    void checkout();
 }

@@ -14,4 +14,11 @@ public class OrderServiceImpl implements OrderService {
     public String cachedLookup() {
         return "cached";
     }
+
+    @Override
+    public void checkout() {
+        // this.placeOrder()는 프록시가 아니라 이 인스턴스로 직접 가므로, 외부에서
+        // proxy.placeOrder()를 부르는 것과 달리 측정되지 않는다(11주차 self-invocation 참고).
+        placeOrder();
+    }
 }
