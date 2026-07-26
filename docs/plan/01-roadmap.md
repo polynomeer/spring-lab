@@ -38,7 +38,8 @@
 | 8 | `@Configuration`과 `@Bean` | 완료 | [`08-configuration-bean/configuration-bean.md`](../08-configuration-bean/configuration-bean.md) |
 | 9 | 생성자 주입과 의존성 탐색 | 완료 | [`09-dependency-resolution/dependency-resolution.md`](../09-dependency-resolution/dependency-resolution.md) |
 | 10 | `@Primary`, `@Qualifier`와 순환 참조 | 완료 | [`10-primary-qualifier-circular/primary-qualifier-circular.md`](../10-primary-qualifier-circular/primary-qualifier-circular.md) |
-| 11~20 | Spring AOP 이후 | 미착수 | — |
+| 11 | 프록시와 인터셉터 체인 | 코드 완료, 문서 작성 전 | — |
+| 12~20 | 자동 프록시 생성 이후 | 미착수 | — |
 
 구체적으로 어떤 프로젝트가 끝났는지는 [`02-project-catalog.md`](./02-project-catalog.md)의 진행 상황 표를 참고한다.
 
