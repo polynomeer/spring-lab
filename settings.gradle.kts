@@ -6,5 +6,6 @@ include(
     "experiments:context-refresh-visualizer",
     "experiments:bean-lifecycle-recorder",
     "mini-spring:mini-container",
+    "spring-extensions:configuration-property-rewriter",
     "tools:jdi-tracer",
 )
