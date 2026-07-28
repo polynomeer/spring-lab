@@ -40,7 +40,7 @@
 | 10 | `@Primary`, `@Qualifier`와 순환 참조 | 완료 | [`10-primary-qualifier-circular/primary-qualifier-circular.md`](../10-primary-qualifier-circular/primary-qualifier-circular.md) |
 | 11 | 프록시와 인터셉터 체인 | 완료 | [`11-proxy-interceptor/proxy-interceptor.md`](../11-proxy-interceptor/proxy-interceptor.md) |
 | 12 | 자동 프록시 생성과 self-invocation | 완료 | [`12-auto-proxy-creator/auto-proxy-creator.md`](../12-auto-proxy-creator/auto-proxy-creator.md) |
-| 13 | @Transactional 내부 동작 | 코드 완료, 문서 작성 전 | — |
+| 13 | @Transactional 내부 동작 | 완료 | [`13-transactional-internals/transactional-internals.md`](../13-transactional-internals/transactional-internals.md) |
 | 14~20 | 트랜잭션 전파 이후 | 미착수 | — |
 
 구체적으로 어떤 프로젝트가 끝났는지는 [`02-project-catalog.md`](./02-project-catalog.md)의 진행 상황 표를 참고한다.
