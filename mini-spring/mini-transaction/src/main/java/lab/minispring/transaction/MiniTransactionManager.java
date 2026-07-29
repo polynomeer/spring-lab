@@ -2,7 +2,7 @@ package lab.minispring.transaction;
 
 public interface MiniTransactionManager {
 
-    MiniTransactionStatus begin();
+    MiniTransactionStatus begin(MiniPropagation propagation);
 
     void commit(MiniTransactionStatus status);
 

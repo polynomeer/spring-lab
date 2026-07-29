@@ -16,4 +16,19 @@ public final class AccountFacadeImpl implements AccountFacade {
         account.transfer(accountId, deltaA);
         account.transfer(accountId, deltaB);
     }
+
+    @Override
+    public void transferTwiceSwallowingFailures(int accountId, int deltaA, int deltaB) {
+        // 두 이체 중 하나가 실패해도 여기서 삼키므로, 이 메서드 자체는 항상 정상적으로
+        // 리턴한다 - owner의 commit()이 rollback-only 표시를 보고 실제로는 롤백할지(5단계)
+        // 아니면 그대로 커밋해 버릴지(2단계까지의 버그)가 갈리는 지점이다.
+        try {
+            account.transfer(accountId, deltaA);
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            account.transfer(accountId, deltaB);
+        } catch (RuntimeException ignored) {
+        }
+    }
 }

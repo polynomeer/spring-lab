@@ -8,19 +8,31 @@ import java.sql.Connection;
 // 마음대로 커밋/롤백해 버리면 주인이 시작한 트랜잭션의 나머지 작업이 끊겨 버리기 때문이다.
 public final class MiniTransactionStatus {
 
-    private final Connection connection;
+    private final MiniConnectionHolder holder;
     private final boolean newTransaction;
+    private final MiniConnectionHolder suspendedHolder;
 
-    public MiniTransactionStatus(Connection connection, boolean newTransaction) {
-        this.connection = connection;
+    MiniTransactionStatus(MiniConnectionHolder holder, boolean newTransaction, MiniConnectionHolder suspendedHolder) {
+        this.holder = holder;
         this.newTransaction = newTransaction;
+        this.suspendedHolder = suspendedHolder;
     }
 
     public Connection getConnection() {
-        return connection;
+        return holder.getConnection();
     }
 
     public boolean isNewTransaction() {
         return newTransaction;
+    }
+
+    MiniConnectionHolder getHolder() {
+        return holder;
+    }
+
+    // REQUIRES_NEW로 시작하면서 기존 트랜잭션을 밀어냈다면(suspend) 그 기존 트랜잭션의
+    // 홀더를 들고 있다가, 이 새 트랜잭션이 끝날 때 다시 스레드에 복원(resume)한다.
+    MiniConnectionHolder getSuspendedHolder() {
+        return suspendedHolder;
     }
 }
