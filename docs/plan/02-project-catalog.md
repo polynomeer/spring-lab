@@ -50,8 +50,8 @@ spring-internals-lab/
 | 18 | Proxy Playground | 완료 | [`experiments/proxy-playground`](../../experiments/proxy-playground) |
 | 19 | Mini AOP Framework | 완료 — JDK Dynamic Proxy 기반만 구현, CGLIB 상당 서브클래스 프록시는 범위 밖 | [`mini-spring/mini-aop`](../../mini-spring/mini-aop) |
 | 20 | Annotation-Based Auto Proxy Creator | 완료 | [`mini-spring/mini-auto-proxy`](../../mini-spring/mini-auto-proxy) |
-| 21 | Transaction Propagation Playground | 기본 동작(13주차)만 완료 — 전파 속성 실험 조합(14주차)은 미룸 | [`experiments/transaction-propagation-playground`](../../experiments/transaction-propagation-playground) |
-| 22 | Mini Transaction Manager | 1~2단계(항상 새 트랜잭션/ThreadLocal 참여)만 완료 — 3~6단계(REQUIRED/REQUIRES_NEW/rollback-only/Synchronization)는 14주차로 미룸 | [`mini-spring/mini-transaction`](../../mini-spring/mini-transaction) |
+| 21 | Transaction Propagation Playground | 완료 | [`experiments/transaction-propagation-playground`](../../experiments/transaction-propagation-playground) |
+| 22 | Mini Transaction Manager | 완료 (1~6단계) | [`mini-spring/mini-transaction`](../../mini-spring/mini-transaction) |
 | 23~32 | — | 미착수 | — |
 
 각 프로젝트의 분석 과정과 발견한 내용은 대응하는 `docs/<NN>-<topic>/` 문서에 있다 — [`01-roadmap.md`](./01-roadmap.md)의 진행 상황 표에서 링크를 따라간다.
