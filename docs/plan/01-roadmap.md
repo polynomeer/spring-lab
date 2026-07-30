@@ -47,7 +47,7 @@
 | 17 | SpringApplication | 완료 | [`17-spring-application/spring-application.md`](../17-spring-application/spring-application.md) |
 | 18 | 자동 설정 | 완료 | [`18-auto-configuration/auto-configuration.md`](../18-auto-configuration/auto-configuration.md) |
 | 19 | 조건부 설정 | 완료 | [`19-conditional-configuration/conditional-configuration.md`](../19-conditional-configuration/conditional-configuration.md) |
-| 20 | Starter와 AutoConfiguration 직접 구현 | 미착수 | — |
+| 20 | Starter와 AutoConfiguration 직접 구현 | 완료 | [`20-custom-starter/custom-starter.md`](../20-custom-starter/custom-starter.md) |
 
 구체적으로 어떤 프로젝트가 끝났는지는 [`02-project-catalog.md`](./02-project-catalog.md)의 진행 상황 표를 참고한다.
 
