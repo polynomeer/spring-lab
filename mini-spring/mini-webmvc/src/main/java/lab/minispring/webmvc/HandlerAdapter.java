@@ -11,5 +11,8 @@ public interface HandlerAdapter {
 
     boolean supports(Object handler);
 
-    Object handle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception;
+    // 반환값은 이제 없다(16주차부터) - 핸들러를 호출한 결과를 응답에 쓰는 책임 자체가
+    // ReturnValueHandler로 넘어갔기 때문이다. MiniDispatcherServlet은 더 이상 반환값을
+    // 알 필요가 없다.
+    void handle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception;
 }
