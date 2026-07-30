@@ -43,7 +43,8 @@
 | 13 | @Transactional 내부 동작 | 완료 | [`13-transactional-internals/transactional-internals.md`](../13-transactional-internals/transactional-internals.md) |
 | 14 | 트랜잭션 전파와 자원 바인딩 | 완료 | [`14-transaction-propagation/transaction-propagation.md`](../14-transaction-propagation/transaction-propagation.md) |
 | 15 | DispatcherServlet 요청 처리 | 완료 | [`15-dispatcher-servlet/dispatcher-servlet.md`](../15-dispatcher-servlet/dispatcher-servlet.md) |
-| 16~20 | 컨트롤러 메서드 호출 이후 | 미착수 | — |
+| 16 | 컨트롤러 메서드 호출과 응답 변환 | 코드 완료, 문서 작성 전 | — |
+| 17~20 | 선택 과정(Spring Boot 내부) | 미착수 | — |
 
 구체적으로 어떤 프로젝트가 끝났는지는 [`02-project-catalog.md`](./02-project-catalog.md)의 진행 상황 표를 참고한다.
 

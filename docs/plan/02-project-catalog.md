@@ -53,8 +53,10 @@ spring-internals-lab/
 | 21 | Transaction Propagation Playground | 완료 | [`experiments/transaction-propagation-playground`](../../experiments/transaction-propagation-playground) |
 | 22 | Mini Transaction Manager | 완료 (1~6단계) | [`mini-spring/mini-transaction`](../../mini-spring/mini-transaction) |
 | 24 | DispatcherServlet Trace Application | 완료 | [`experiments/dispatcher-servlet-trace`](../../experiments/dispatcher-servlet-trace) |
-| 27 | Mini Web MVC | 1~3단계(Front Controller/HandlerMapping/HandlerAdapter)만 완료 — 4~6단계(ArgumentResolver/ReturnValueHandler/ExceptionResolver)는 16주차로 미룸 | [`mini-spring/mini-webmvc`](../../mini-spring/mini-webmvc) |
-| 23, 25~26, 28~32 | — | 미착수 | — |
+| 25 | Custom Argument Resolver | 완료 | [`spring-extensions/current-user-argument-resolver`](../../spring-extensions/current-user-argument-resolver) |
+| 26 | Custom Return Value Handler | 완료 | [`spring-extensions/api-response-handler`](../../spring-extensions/api-response-handler) |
+| 27 | Mini Web MVC | 완료 (1~6단계) | [`mini-spring/mini-webmvc`](../../mini-spring/mini-webmvc) |
+| 23, 28~32 | — | 미착수 | — |
 
 각 프로젝트의 분석 과정과 발견한 내용은 대응하는 `docs/<NN>-<topic>/` 문서에 있다 — [`01-roadmap.md`](./01-roadmap.md)의 진행 상황 표에서 링크를 따라간다.
 
