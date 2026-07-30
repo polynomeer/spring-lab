@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -66,6 +67,24 @@ class SpringApplicationLifecycleTest {
             // ApplicationStartedEvent/ApplicationReadyEvent - refresh()가 끝나서 빈 조회가 가능하다.
             assertThat(find(observations, "ApplicationStartedEvent").beanLookupAvailable()).isTrue();
             assertThat(find(observations, "ApplicationReadyEvent").beanLookupAvailable()).isTrue();
+        } finally {
+            context.close();
+        }
+    }
+
+    @Test
+    void noWebFactoryOnTheClasspathFallsBackToAnnotationConfigApplicationContext() {
+        // DefaultApplicationContextFactory#create()는 SpringFactoriesLoader로 등록된
+        // ApplicationContextFactory 후보(spring-boot-starter-web/webflux가 얹히면 각각의
+        // 후보가 여기서 등록된다)를 WebApplicationType과 맞춰 본 뒤, 아무도 응답하지 않으면
+        // AnnotationConfigApplicationContext로 떨어진다 - 이 모듈은 web 관련 의존성이 전혀
+        // 없으므로 항상 이 fallback 경로를 탄다.
+        SpringApplication application = new SpringApplication(LifecycleConfig.class);
+        application.setWebApplicationType(WebApplicationType.NONE);
+
+        ConfigurableApplicationContext context = application.run();
+        try {
+            assertThat(context).isExactlyInstanceOf(AnnotationConfigApplicationContext.class);
         } finally {
             context.close();
         }
