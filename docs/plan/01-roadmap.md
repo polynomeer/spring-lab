@@ -44,7 +44,7 @@
 | 14 | 트랜잭션 전파와 자원 바인딩 | 완료 | [`14-transaction-propagation/transaction-propagation.md`](../14-transaction-propagation/transaction-propagation.md) |
 | 15 | DispatcherServlet 요청 처리 | 완료 | [`15-dispatcher-servlet/dispatcher-servlet.md`](../15-dispatcher-servlet/dispatcher-servlet.md) |
 | 16 | 컨트롤러 메서드 호출과 응답 변환 | 완료 | [`16-controller-invocation/controller-invocation.md`](../16-controller-invocation/controller-invocation.md) |
-| 17 | SpringApplication | 코드 완료, 문서 작성 전 | — |
+| 17 | SpringApplication | 완료 | [`17-spring-application/spring-application.md`](../17-spring-application/spring-application.md) |
 | 18~20 | 자동 설정 이후(Spring Boot 내부) | 미착수 | — |
 
 구체적으로 어떤 프로젝트가 끝났는지는 [`02-project-catalog.md`](./02-project-catalog.md)의 진행 상황 표를 참고한다.
