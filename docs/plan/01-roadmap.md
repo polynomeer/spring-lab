@@ -534,6 +534,8 @@ ExceptionHandlerExceptionResolver
 
 ## 최종 포트폴리오 결과물
 
+핵심 16주 전체를 가로지르는 회고는 [`retrospective/retrospective.md`](../retrospective/retrospective.md)에 정리했다 - 반복된 설계 패턴, 구현하며 발견한 버그 목록, 아래 4가지 핵심 주제에 대한 답, 학습 완료 기준 자가 점검을 담았다.
+
 **문서**: ApplicationContext refresh 분석 / Bean 생성 생명주기 분석 / 의존성 후보 선택 알고리즘 / BeanPostProcessor와 프록시 생성 / Spring AOP 인터셉터 체인 / @Transactional 내부 동작 / 트랜잭션 전파와 ThreadLocal / DispatcherServlet 요청 처리
 
 **구현**: Mini IoC Container / Mini Dependency Injection / Mini BeanPostProcessor / Mini AOP / Mini Transaction Manager / Mini Web MVC
