@@ -45,7 +45,9 @@
 | 15 | DispatcherServlet 요청 처리 | 완료 | [`15-dispatcher-servlet/dispatcher-servlet.md`](../15-dispatcher-servlet/dispatcher-servlet.md) |
 | 16 | 컨트롤러 메서드 호출과 응답 변환 | 완료 | [`16-controller-invocation/controller-invocation.md`](../16-controller-invocation/controller-invocation.md) |
 | 17 | SpringApplication | 완료 | [`17-spring-application/spring-application.md`](../17-spring-application/spring-application.md) |
-| 18~20 | 자동 설정 이후(Spring Boot 내부) | 미착수 | — |
+| 18 | 자동 설정 | 완료 | [`18-auto-configuration/auto-configuration.md`](../18-auto-configuration/auto-configuration.md) |
+| 19 | 조건부 설정 | 완료 | [`19-conditional-configuration/conditional-configuration.md`](../19-conditional-configuration/conditional-configuration.md) |
+| 20 | Starter와 AutoConfiguration 직접 구현 | 미착수 | — |
 
 구체적으로 어떤 프로젝트가 끝났는지는 [`02-project-catalog.md`](./02-project-catalog.md)의 진행 상황 표를 참고한다.
 
