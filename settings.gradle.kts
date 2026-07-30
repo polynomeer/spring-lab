@@ -18,7 +18,9 @@ include(
     "mini-spring:mini-auto-proxy",
     "mini-spring:mini-transaction",
     "mini-spring:mini-webmvc",
+    "spring-extensions:api-response-handler",
     "spring-extensions:configuration-property-rewriter",
+    "spring-extensions:current-user-argument-resolver",
     "spring-extensions:method-timing-post-processor",
     "tools:jdi-tracer",
 )
