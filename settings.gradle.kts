@@ -24,5 +24,8 @@ include(
     "spring-extensions:configuration-property-rewriter",
     "spring-extensions:current-user-argument-resolver",
     "spring-extensions:method-timing-post-processor",
+    "spring-extensions:mini-observability-starter:core",
+    "spring-extensions:mini-observability-starter:autoconfigure",
+    "spring-extensions:mini-observability-starter:starter",
     "tools:jdi-tracer",
 )
