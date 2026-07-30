@@ -11,6 +11,7 @@ include(
     "experiments:proxy-playground",
     "experiments:transaction-propagation-playground",
     "experiments:dispatcher-servlet-trace",
+    "experiments:spring-application-lifecycle",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
