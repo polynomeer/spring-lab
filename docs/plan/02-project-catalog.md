@@ -56,7 +56,8 @@ spring-internals-lab/
 | 25 | Custom Argument Resolver | 완료 | [`spring-extensions/current-user-argument-resolver`](../../spring-extensions/current-user-argument-resolver) |
 | 26 | Custom Return Value Handler | 완료 | [`spring-extensions/api-response-handler`](../../spring-extensions/api-response-handler) |
 | 27 | Mini Web MVC | 완료 (1~6단계) | [`mini-spring/mini-webmvc`](../../mini-spring/mini-webmvc) |
-| 23, 28~32 | — | 미착수 | — |
+| 31 | SpringApplication Lifecycle Inspector | 기본 이벤트 순서/가용성만 완료 — 웹 서버 시작 시점 관찰은 자동 설정(18주차) 이후로 미룸 | [`experiments/spring-application-lifecycle`](../../experiments/spring-application-lifecycle) |
+| 23, 28~30, 32 | — | 미착수 | — |
 
 각 프로젝트의 분석 과정과 발견한 내용은 대응하는 `docs/<NN>-<topic>/` 문서에 있다 — [`01-roadmap.md`](./01-roadmap.md)의 진행 상황 표에서 링크를 따라간다.
 
