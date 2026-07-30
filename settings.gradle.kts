@@ -12,6 +12,7 @@ include(
     "experiments:transaction-propagation-playground",
     "experiments:dispatcher-servlet-trace",
     "experiments:spring-application-lifecycle",
+    "experiments:auto-configuration-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",

@@ -1,0 +1,7 @@
+# 일부러 순서를 뒤바꿔서 적었다 - GreetingAutoConfiguration이 파일에는 먼저 나오지만,
+# 그 클래스에 @AutoConfiguration(after = LoggingSupportAutoConfiguration.class)가 선언돼
+# 있으므로, AutoConfigurationSorter가 실제 처리 순서를 파일 순서와 무관하게 재정렬해야 한다.
+lab.experiments.autoconfig.GreetingAutoConfiguration
+lab.experiments.autoconfig.LoggingSupportAutoConfiguration
+lab.experiments.autoconfig.JacksonSupportAutoConfiguration
+lab.experiments.autoconfig.SlowModeAutoConfiguration
