@@ -36,6 +36,13 @@ public final class JdbcMiniTransactionManager implements MiniTransactionManager 
         holder.addSynchronization(synchronization);
     }
 
+    // 실제 TransactionSynchronizationManager.isSynchronizationActive()에 대응한다 - mini-event가
+    // "커밋 후 실행" 리스너를 등록할지, 아니면 (트랜잭션이 아예 없으니) 조용히 버릴지를
+    // 판단하는 데 쓴다.
+    public boolean isTransactionActive() {
+        return holderThreadLocal.get() != null;
+    }
+
     @Override
     public MiniTransactionStatus begin(MiniPropagation propagation) {
         MiniConnectionHolder existing = holderThreadLocal.get();
