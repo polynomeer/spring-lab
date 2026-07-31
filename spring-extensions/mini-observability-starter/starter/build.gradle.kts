@@ -6,5 +6,5 @@ plugins {
 
 dependencies {
     api(project(":spring-extensions:mini-observability-starter:autoconfigure"))
-    api("org.springframework.boot:spring-boot-starter-web:3.5.0")
+    api(libs.spring.boot.starter.web)
 }

@@ -6,9 +6,9 @@ plugins {
 
 dependencies {
     api(project(":spring-extensions:mini-observability-starter:core"))
-    implementation("org.springframework.boot:spring-boot-autoconfigure:3.5.0")
-    implementation("org.springframework:spring-webmvc:6.2.19")
-    testImplementation("org.springframework.boot:spring-boot-test:3.5.0")
-    testImplementation("jakarta.servlet:jakarta.servlet-api:6.0.0")
-    testImplementation("org.springframework:spring-test:6.2.19")
+    implementation(libs.spring.boot.autoconfigure)
+    implementation(libs.spring.webmvc)
+    testImplementation(libs.spring.boot.test)
+    testImplementation(libs.jakarta.servlet.api)
+    testImplementation(libs.spring.test)
 }

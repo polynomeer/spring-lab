@@ -1,9 +1,9 @@
 dependencies {
-    implementation("org.springframework:spring-webmvc:6.2.19")
-    implementation("jakarta.servlet:jakarta.servlet-api:6.0.0")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.2")
-    testImplementation("org.springframework:spring-test:6.2.19")
-    testImplementation("org.hamcrest:hamcrest:2.2")
-    testImplementation("com.jayway.jsonpath:json-path:2.9.0")
+    implementation(libs.spring.webmvc)
+    implementation(libs.jakarta.servlet.api)
+    implementation(libs.jackson.databind)
+    implementation(libs.jackson.datatype.jsr310)
+    testImplementation(libs.spring.test)
+    testImplementation(libs.hamcrest)
+    testImplementation(libs.json.path)
 }

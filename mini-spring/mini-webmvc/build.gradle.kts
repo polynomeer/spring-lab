@@ -1,3 +1,3 @@
 dependencies {
-    implementation("jakarta.servlet:jakarta.servlet-api:6.0.0")
+    implementation(libs.jakarta.servlet.api)
 }

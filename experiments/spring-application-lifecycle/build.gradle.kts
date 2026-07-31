@@ -1,3 +1,3 @@
 dependencies {
-    implementation("org.springframework.boot:spring-boot:3.5.0")
+    implementation(libs.spring.boot)
 }

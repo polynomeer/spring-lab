@@ -1,3 +1,6 @@
+import org.gradle.api.artifacts.VersionCatalog
+import org.gradle.api.artifacts.VersionCatalogsExtension
+
 plugins {
     java
 }
@@ -7,6 +10,12 @@ allprojects {
         mavenCentral()
     }
 }
+
+// 버전 카탈로그의 타입-세이프 accessor(libs.xxx)는 allprojects/subprojects 같은 교차
+// 프로젝트 설정 블록 안에서는 지원되지 않는다(Gradle 자체의 제약) - 그래서 여기서는
+// VersionCatalogsExtension으로 이름 기반 동적 조회를 쓴다. 각 서브모듈 자신의
+// build.gradle.kts에서는 평범하게 libs.xxx를 그대로 쓸 수 있다.
+val rootLibs: VersionCatalog = extensions.getByType<VersionCatalogsExtension>().named("libs")
 
 subprojects {
     apply(plugin = "java")
@@ -29,10 +38,10 @@ subprojects {
     }
 
     dependencies {
-        add("testImplementation", platform("org.junit:junit-bom:5.11.4"))
-        add("testImplementation", "org.junit.jupiter:junit-jupiter")
-        add("testRuntimeOnly", "org.junit.jupiter:junit-jupiter-engine")
-        add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
-        add("testImplementation", "org.assertj:assertj-core:3.26.3")
+        add("testImplementation", platform(rootLibs.findLibrary("junit-bom").get()))
+        add("testImplementation", rootLibs.findLibrary("junit-jupiter").get())
+        add("testRuntimeOnly", rootLibs.findLibrary("junit-jupiter-engine").get())
+        add("testRuntimeOnly", rootLibs.findLibrary("junit-platform-launcher").get())
+        add("testImplementation", rootLibs.findLibrary("assertj-core").get())
     }
 }
