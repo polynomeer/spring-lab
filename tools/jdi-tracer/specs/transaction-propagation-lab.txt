@@ -1,0 +1,7 @@
+# Transaction interceptor chain for experiments/transaction-propagation-playground's
+# TransactionPropagationLab. See docs/plan/01-roadmap.md (13-14주차) for why these
+# methods matter, and docs/14-transaction-propagation/transaction-propagation.md for
+# the session write-up.
+org.springframework.transaction.interceptor.TransactionInterceptor#invoke
+org.springframework.transaction.interceptor.TransactionAspectSupport#invokeWithinTransaction,createTransactionIfNecessary,commitTransactionAfterReturning,completeTransactionAfterThrowing
+org.springframework.transaction.support.AbstractPlatformTransactionManager#getTransaction,suspend,resume,commit,rollback,processCommit,processRollback

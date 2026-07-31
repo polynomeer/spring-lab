@@ -100,7 +100,7 @@ REQUIRED/REQUIRES_NEW/NESTED 세 경로를 나란히 그린 시퀀스 다이어�
 
 ## 7. 브레이크포인트
 
-이번 주제는 실행 결과(8번)와 소스 확인(6·9번)으로 검증했고 `tools/jdi-tracer`로 직접 추적하지는 않았다.
+이번 주제는 처음에는 실행 결과(8번)와 소스 확인(6·9번)만으로 검증했지만, 이후 `tools/jdi-tracer`로 실제 인터셉터 체인을 직접 추적하는 세션을 진행했다(아래 7.1). 애초에 예정했던 브레이크포인트 대상:
 
 ```text
 org.springframework.transaction.support.AbstractPlatformTransactionManager#getTransaction
@@ -110,6 +110,29 @@ org.springframework.jdbc.datasource.DataSourceTransactionManager#doSuspend
 org.springframework.jdbc.datasource.DataSourceTransactionManager#doResume
 org.springframework.transaction.support.TransactionSynchronizationManager#bindResource
 ```
+
+### 7.1 jdi-tracer 세션 — 인터셉터 체인 실측
+
+전용 실행 진입점 [`TransactionPropagationLab`](../../experiments/transaction-propagation-playground/src/main/java/lab/experiments/tx/TransactionPropagationLab.java)을 새로 추가해 `OrderService.placeOrderInnerRequiresNew(false)`와 `placeOrderCatchingInnerRequiredFailure(true)` 두 시나리오를 실행시키고, 아래 스펙([`tools/jdi-tracer/specs/transaction-propagation-lab.txt`](../../tools/jdi-tracer/specs/transaction-propagation-lab.txt))으로 실제 인터셉터 체인 전체를 추적했다:
+
+```text
+org.springframework.transaction.interceptor.TransactionInterceptor#invoke
+org.springframework.transaction.interceptor.TransactionAspectSupport#invokeWithinTransaction,createTransactionIfNecessary,commitTransactionAfterReturning,completeTransactionAfterThrowing
+org.springframework.transaction.support.AbstractPlatformTransactionManager#getTransaction,suspend,resume,commit,rollback,processCommit,processRollback
+```
+
+```bash
+./gradlew :tools:jdi-tracer:run --args="\"<target-runtime-classpath>\" lab.experiments.tx.TransactionPropagationLab tools/jdi-tracer/specs/transaction-propagation-lab.txt"
+```
+
+32번의 브레이크포인트 히트로 확인한, 소스만 읽어서는 놓치기 쉬웠던 것들:
+
+- **`suspend(null)`이 "아무 트랜잭션도 없을 때" 매번 불린다.** `getTransaction()`을 처음부터 다시 읽어 보면(373~410행), `REQUIRED`/`REQUIRES_NEW`/`NESTED`로 **완전히 새 트랜잭션을 만들 때조차** `suspend(null)`을 호출한다(400행) — 정말 떼어낼 대상(`transaction`)이 없어도 호출 자체는 일어난다. 실제로 "기존 트랜잭션을 잠시 치워 두는" `suspend`는 `handleExistingTransaction()`의 `REQUIRES_NEW` 분기(439행)에서, 진짜 `transaction` 객체를 인자로 다시 호출될 때다 — 트레이스의 스택에 `handleExistingTransaction`이 끼어 있는지로 이 둘을 구분할 수 있었다(히트 #5 vs #10).
+- **`resume()`은 바깥 코드가 제어권을 돌려받기도 전에, 안쪽 트랜잭션의 커밋 안에서 이미 끝난다.** 히트 #14의 스택은 `resume ← cleanupAfterCompletion ← processCommit ← commit ← commitTransactionAfterReturning`이다 — 즉 `payRequiresNew()`가 커밋되는 그 순간(`processCommit`의 정리 단계)에 곧바로 바깥 트랜잭션이 복원되며, `OrderServiceImpl.placeOrder()`의 자바 호출 스택은 아직 `payRequiresNew()` 안에 있다. "resume은 나중에 order가 이어받을 때 일어난다"는 직관과 달리, resume은 **결제 트랜잭션 자신의 완료 절차의 일부**다.
+- **`REQUIRED` 참여자의 실패는 `setRollbackOnly()`가 아니라 실제 `rollback()` 호출로 이어진다.** 히트 #28에서 `completeTransactionAfterThrowing`이 (새 트랜잭션이 아닌데도) `rollback(status)`를 그대로 호출하고, 히트 #29의 `processRollback`에서 `unexpected=false`로 처리되는 걸 확인했다 — `processRollback`이 내부적으로 "이 트랜잭션이 진짜 새 트랜잭션인가"를 보고 실제 DB 롤백 여부와 rollback-only 마킹 여부를 가른다는 뜻이다(13주차 문서에서 이미 본 로직이 여기서 실측됨).
+- **바깥의 `commit()` 호출이 내부적으로 `processCommit`이 아니라 `processRollback`으로 새는 지점이 `UnexpectedRollbackException`의 진짜 발생 위치다.** 히트 #31→#32: `AbstractPlatformTransactionManager#commit`이 호출됐는데 실제로 도달한 곳은 `processRollback`(`unexpected=true`)이었다. `PaymentFailedException`은 이미 `placeOrderCatchingInnerFailure`의 `catch`에서 삼켜졌는데도, 예외가 전혀 없는 그 `commit()` 호출 자체가 `UnexpectedRollbackException`을 던진다 — "예외를 잡았으니 안전하다"는 호출자 쪽 직관이 트랜잭션 경계에서는 성립하지 않는다는 걸 실행 순서로 직접 확인했다.
+
+이 트레이스의 원본 출력(468줄)은 세션 로그에는 남기지 않았지만, 위 32개 히트 각각의 스택/지역변수는 스펙 파일 그대로 재실행하면 동일하게 재현된다.
 
 ## 8. 런타임 관찰
 
