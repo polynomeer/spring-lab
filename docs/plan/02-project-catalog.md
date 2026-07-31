@@ -52,6 +52,7 @@ spring-internals-lab/
 | 20 | Annotation-Based Auto Proxy Creator | 완료 | [`mini-spring/mini-auto-proxy`](../../mini-spring/mini-auto-proxy) |
 | 21 | Transaction Propagation Playground | 완료 | [`experiments/transaction-propagation-playground`](../../experiments/transaction-propagation-playground) |
 | 22 | Mini Transaction Manager | 완료 (1~6단계) | [`mini-spring/mini-transaction`](../../mini-spring/mini-transaction) |
+| 23 | Transactional Outbox Sample | 완료 | [`sample-app/transactional-outbox-order`](../../sample-app/transactional-outbox-order) |
 | 24 | DispatcherServlet Trace Application | 완료 | [`experiments/dispatcher-servlet-trace`](../../experiments/dispatcher-servlet-trace) |
 | 25 | Custom Argument Resolver | 완료 | [`spring-extensions/current-user-argument-resolver`](../../spring-extensions/current-user-argument-resolver) |
 | 26 | Custom Return Value Handler | 완료 | [`spring-extensions/api-response-handler`](../../spring-extensions/api-response-handler) |
@@ -61,7 +62,6 @@ spring-internals-lab/
 | 30 | Mini Event Multicaster | 완료 | [`mini-spring/mini-event`](../../mini-spring/mini-event) |
 | 31 | SpringApplication Lifecycle Inspector | 기본 이벤트 순서/가용성만 완료 — 웹 서버 시작 시점 관찰은 자동 설정(18주차) 이후로 미룸 | [`experiments/spring-application-lifecycle`](../../experiments/spring-application-lifecycle) |
 | 32 | Custom AutoConfiguration | 완료 (`request-observation` 대신 `mini-observability-starter`로 명명) | [`spring-extensions/mini-observability-starter`](../../spring-extensions/mini-observability-starter) |
-| 23 | — | 미착수 | — |
 
 각 프로젝트의 분석 과정과 발견한 내용은 대응하는 `docs/<NN>-<topic>/` 문서에 있다 — [`01-roadmap.md`](./01-roadmap.md)의 진행 상황 표에서 링크를 따라간다.
 
