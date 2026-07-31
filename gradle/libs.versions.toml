@@ -10,6 +10,8 @@ junit = "5.11.4"
 assertj = "3.26.3"
 hamcrest = "2.2"
 jsonPath = "2.9.0"
+hibernateValidator = "8.0.2.Final"
+jakartaEl = "4.0.2"
 
 [libraries]
 spring-context = { module = "org.springframework:spring-context", version.ref = "spring" }
@@ -28,6 +30,8 @@ h2 = { module = "com.h2database:h2", version.ref = "h2" }
 aspectjweaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj" }
 hamcrest = { module = "org.hamcrest:hamcrest", version.ref = "hamcrest" }
 json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
+hibernate-validator = { module = "org.hibernate.validator:hibernate-validator", version.ref = "hibernateValidator" }
+jakarta-el = { module = "org.glassfish:jakarta.el", version.ref = "jakartaEl" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine" }

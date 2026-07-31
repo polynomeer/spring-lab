@@ -14,6 +14,7 @@ include(
     "experiments:spring-application-lifecycle",
     "experiments:auto-configuration-lab",
     "experiments:application-event-lab",
+    "experiments:mvc-exception-pipeline",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
