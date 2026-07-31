@@ -1,15 +1,16 @@
-# 핵심 16주 회고 — Spring 내부 구조를 다시 짜 보며 배운 것
+# 20주 회고 — Spring 내부 구조를 다시 짜 보며 배운 것
 
-[`docs/plan/01-roadmap.md`](../plan/01-roadmap.md)가 요구하는 최종 산출물이다. 1주차(IoC와 BeanFactory)부터 16주차(컨트롤러 메서드 호출과 응답 변환)까지, 8단계(IoC 컨테이너 → 빈 생명주기 → 확장점 → 컴포넌트 스캔/DI → AOP → 트랜잭션 → Spring MVC)를 관통하며 반복적으로 나타난 패턴과 직접 부딪힌 버그들을 모은다. 개별 주차의 세부 내용은 각 문서를 참고하고, 이 문서는 그 16개 문서를 가로지르는 결을 정리하는 데 집중한다.
+[`docs/plan/01-roadmap.md`](../plan/01-roadmap.md)가 요구하는 최종 산출물이다. 1주차(IoC와 BeanFactory)부터 16주차(컨트롤러 메서드 호출과 응답 변환)까지 핵심 8단계(IoC 컨테이너 → 빈 생명주기 → 확장점 → 컴포넌트 스캔/DI → AOP → 트랜잭션 → Spring MVC)를 마친 뒤, 선택 과정인 17~20주차(Spring Boot 내부 - `SpringApplication`, 자동 설정, 조건부 설정, Starter 직접 구현)까지 이어서 완주했다. 이 문서는 그 20개 문서를 가로지르는 반복된 패턴과 직접 부딪힌 버그들을 정리하는 데 집중한다. 개별 주차의 세부 내용은 각 문서를 참고한다.
 
-## 0. 숫자로 보는 16주
+## 0. 숫자로 보는 20주
 
-- 주제 문서 16개(`docs/01-*` ~ `docs/16-*`), 그중 15개에 mermaid 다이어그램 포함(6주차는 새 실험 없이 4·5주차를 종합하는 회고 성격이라 다이어그램 없이 소스 분석만 남김)
-- 코드 모듈 22개: `experiments/` 10개(실제 Spring으로 검증), `mini-spring/` 7개(축소 재구현), `spring-extensions/` 4개(실제 확장점 활용), `tools/` 1개(`jdi-tracer`)
-- 자동화 테스트 196개, 전부 통과(`./gradlew build` 기준)
-- 공식 `spring-framework` 소스(v6.2.19 태그)를 근거로 인용한 주요 클래스/메서드: `DefaultListableBeanFactory`, `AbstractAutowireCapableBeanFactory`, `ConfigurationClassEnhancer`, `AutowiredAnnotationBeanPostProcessor`, `AbstractAutoProxyCreator`, `AbstractAdvisorAutoProxyCreator`, `TransactionAspectSupport`, `AbstractPlatformTransactionManager`, `DispatcherServlet`, `InvocableHandlerMethod` 등
+- 주제 문서 20개(`docs/01-*` ~ `docs/20-*`), 그중 19개에 mermaid 다이어그램 포함(6주차는 새 실험 없이 4·5주차를 종합하는 회고 성격이라 다이어그램 없이 소스 분석만 남김)
+- 코드 모듈 27개: `experiments/` 12개(실제 Spring/Boot로 검증), `mini-spring/` 7개(축소 재구현 - 16주차 이후로는 만들지 않음, 5번 절 참고), `spring-extensions/` 7개(실제 확장점 활용, 그중 3개는 `mini-observability-starter`의 core/autoconfigure/starter), `tools/` 1개(`jdi-tracer`)
+- 자동화 테스트 217개, 전부 통과(`./gradlew build` 기준)
+- 공식 `spring-framework` 소스(v6.2.19 태그)를 근거로 인용한 주요 클래스/메서드: `DefaultListableBeanFactory`, `AbstractAutowireCapableBeanFactory`, `ConfigurationClassEnhancer`, `AutowiredAnnotationBeanPostProcessor`, `AbstractAutoProxyCreator`, `AbstractAdvisorAutoProxyCreator`, `TransactionAspectSupport`, `AbstractPlatformTransactionManager`, `DispatcherServlet`, `InvocableHandlerMethod`, `ConfigurationClassParser$DeferredImportSelectorHandler` 등
+- 17주차부터는 `spring-boot`/`spring-boot-autoconfigure`의 실제 릴리스 소스(Maven Central의 `-sources.jar`, v3.5.0)를 근거로 삼았다 - 이 저장소에 로컬로 clone해 둔 것은 `spring-framework-src`뿐이라, Spring Boot 공식 테스트 코드는 직접 열람하지 못했다는 것을 17~20주차 문서 9번 절에 매번 정직하게 남겼다
 
-## 1. 8단계 로드맵 요약
+## 1. 로드맵 단계 요약 (핵심 8단계 + 선택 1단계)
 
 | 단계 | 주차 | 핵심 발견 한 줄 | 문서 |
 | --- | --- | --- | --- |
@@ -20,16 +21,18 @@
 | Spring AOP | 11~12 | 프록시 기반 AOP의 모든 한계(self-invocation, final/private 메서드, equals/hashCode 우회)는 "버그"가 아니라 "프록시가 원본과 별개의 객체"라는 한 가지 구조적 사실에서 전부 파생된다 | [11주차](../11-proxy-interceptor/proxy-interceptor.md), [12주차](../12-auto-proxy-creator/auto-proxy-creator.md) |
 | 트랜잭션 | 13~14 | `@Transactional`은 AOP 인터셉터 하나일 뿐이다 - checked 예외는 기본적으로 롤백하지 않고, `REQUIRES_NEW`는 진짜 다른 커넥션을, `NESTED`는 같은 커넥션의 savepoint를 쓴다는 것이 전파 속성의 실체다 | [13주차](../13-transactional-internals/transactional-internals.md), [14주차](../14-transaction-propagation/transaction-propagation.md) |
 | Spring MVC | 15~16 | `DispatcherServlet`은 겨우 몇 줄짜리 반복문(`getHandler`)이고, 복잡성은 전부 `HandlerMapping`/`HandlerAdapter`/`ArgumentResolver`/`ReturnValueHandler`라는 잘게 쪼개진 확장점들이 만들어 낸다 | [15주차](../15-dispatcher-servlet/dispatcher-servlet.md), [16주차](../16-controller-invocation/controller-invocation.md) |
+| Spring Boot 내부(선택) | 17~20 | `SpringApplication`은 컨텍스트가 생기기도 전부터 별도 멀티캐스터로 이벤트를 발행하고, 자동 설정은 `.imports` 파일 탐색(`DeferredImportSelector`로 사용자 설정 파싱이 끝난 뒤 지연 처리)과 `Condition` 인터페이스 하나로 수렴하는 조건 평가로 이뤄진다 - 직접 3모듈 스타터를 조립해서 실전 적용까지 확인했다 | [17주차](../17-spring-application/spring-application.md), [18주차](../18-auto-configuration/auto-configuration.md), [19주차](../19-conditional-configuration/conditional-configuration.md), [20주차](../20-custom-starter/custom-starter.md) |
 
-## 2. 16주에 걸쳐 반복된 설계 패턴
+## 2. 20주에 걸쳐 반복된 설계 패턴
 
-같은 원칙이 서로 다른 주제에서 계속 다시 나타났다는 것 자체가, 이 패턴들이 우연이 아니라 Spring 전체를 관통하는 설계 철학이라는 증거다.
+같은 원칙이 서로 다른 주제에서 계속 다시 나타났다는 것 자체가, 이 패턴들이 우연이 아니라 Spring 전체를 관통하는 설계 철학이라는 증거다. 17~20주차(Spring Boot 내부)를 마치고 나니, 핵심 16주에서 뽑아낸 패턴들이 새 사실이 아니라 이미 있던 결의 반복이었다는 것이 더 분명해졌다.
 
 ### "정교한 판단"보다 "예측 가능한 순서"
 
 - 생성자가 여럿이고 `@Autowired`가 없으면 Spring은 "가장 그럴듯한" 생성자를 추측하지 않고 기본 생성자로 물러난다(9주차).
 - 여러 `HandlerMapping`이 등록되면 "더 적합한" 것을 고르지 않고 **등록 순서(order)** 대로 첫 매칭을 채택한다(15주차) - `HandlerMethodArgumentResolverComposite`도 똑같이 먼저 등록된 리졸버를 채택한다(16주차, 공식 테스트 `checkArgumentResolverOrder`로 확인).
 - 이 원칙의 예외처럼 보이는 것(리터럴 경로가 변수 경로를 항상 이기는 것, 15주차)도 사실은 "등록 순서"가 아니라 "패턴 자체의 구조(`PathPattern.SPECIFICITY_COMPARATOR`)"라는 또 다른 고정된 규칙일 뿐, 여전히 "실행 시점의 똑똑한 판단"은 아니다.
+- 18주차의 `AutoConfigurationSorter`는 이 원칙을 자동 설정 차원으로 그대로 확장한다 - 자동 설정끼리 서로 의존관계가 없어도, `@AutoConfiguration(before/after)`라는 **선언적** 순서 힌트만으로 위상 정렬한다. `.imports` 파일에 적힌 순서(등록 순서)조차 이 선언 앞에서는 무시된다는 것을 직접 파일 순서를 뒤바꿔서 확인했다.
 - 왜 반복되는가: 똑똑한 휴리스틱은 코드베이스가 커질수록 "왜 이번엔 다르게 골랐지?"라는 디버깅 비용을 만든다. Spring은 일관되게 "무엇이 우선인지 예측 가능하게 만드는 것"을 "가장 좋은 것을 자동으로 고르는 것"보다 우선시한다.
 
 ### 확장점은 좁고 합성 가능하게 쪼갠다
@@ -37,6 +40,7 @@
 - `BeanFactoryPostProcessor`(정의 수정)과 `BeanPostProcessor`(인스턴스 개입)는 서로 다른 시점의 서로 다른 관심사라 분리됐다(5~6주차).
 - `HandlerMapping`("무엇을 호출할지")과 `HandlerAdapter`("어떻게 호출할지")가 분리된 것도 같은 이유다(15주차).
 - 16주차에서 가장 선명하게 드러난 사례: `HandlerMethodReturnValueHandler`(반환 타입 전체를 다시 정의하는 무거운 확장점)와 `ResponseBodyAdvice`(이미 있는 처리 파이프라인에 살짝 끼어드는 가벼운 확장점)가 분리돼 있다는 것을 모르고 직접 `ReturnValueHandler`를 만들면, 전역 `ResponseBodyAdvice`를 조용히 우회해 버리는 함정에 빠진다 - 실제로 겪었다.
+- 19주차에서는 이 원칙이 극단까지 간다: `@ConditionalOnClass`/`@ConditionalOnProperty`/`@ConditionalOnBean`처럼 서로 완전히 달라 보이는 애노테이션들이 전부 `Condition`이라는 메서드 하나짜리 인터페이스로 수렴한다. 커스텀 `Condition`을 직접 만들어서 표준 조건들과 똑같이 `ConditionEvaluationReport`에 기록되는 것까지 확인했다 - "새로운 조건 = 새 엔진"이 아니라 "새로운 조건 = 기존 인터페이스의 구현체 하나 추가"였다.
 - 왜 반복되는가: 좁은 확장점은 서로 합성(compose)할 수 있지만, 넓은 확장점은 서로 겹치거나 충돌한다. Pointcut+Advice(11주차), BeanFactoryAdvisorRetrievalHelper의 `AopUtils.canApply()`(12주차)도 전부 "판정 로직 하나 + 그걸 호출하는 배선"으로 쪼개져 있어서 재사용이 가능했다.
 
 ### 프록시는 원본과 별개의 객체라는 사실 하나가 만드는 모든 것
@@ -53,6 +57,15 @@
 - 트랜잭션의 `TransactionSynchronizationManager`(스레드에 `Connection`을 바인딩, 13~14주차)
 - 둘 다 "현재 진행 중인 작업의 상태를 스레드에 걸어 두고, 나중에 같은 스레드의 다른 코드가 그 상태를 다시 찾아 쓴다"는 같은 메커니즘이다. mini 구현(`mini-container`의 `beanCreationPath`, `mini-transaction`의 `holderThreadLocal`)에서 이 메커니즘을 직접 만들어 보고서야, "왜 ThreadLocal인가"(같은 스레드=같은 논리적 작업 단위)가 왜 자연스러운 선택인지 체감했다.
 
+### SPI: 클래스패스가 스스로를 알리게 한다
+
+16주 핵심 과정에는 없던, 17~20주차에서 새로 뚜렷해진 패턴이다.
+
+- `ApplicationContextFactory`(17주차)는 웹 애플리케이션 타입에 맞는 `ApplicationContext`를 어떻게 고를지 하드코딩하지 않는다 - `SpringFactoriesLoader`로 클래스패스에 등록된 후보를 찾고, 아무도 응답하지 않으면 `AnnotationConfigApplicationContext`로 폴백한다.
+- 자동 설정 후보 목록(18주차)도 `spring-boot` core가 "이런 자동 설정들이 있다"고 알고 있는 게 아니라, 각 모듈이 자신의 `META-INF/spring/....imports` 파일에 스스로를 등록해 두는 방식이다.
+- 둘 다 "코어 모듈은 어떤 확장이 존재하는지 몰라야 한다"는 같은 설계에서 나온다 - `spring-boot`(core)는 웹이 서블릿 기반인지 리액티브 기반인지, 어떤 자동 설정들이 클래스패스에 있는지 전혀 몰라도 되고, 그 지식은 전부 각 모듈이 스스로 등록하는 파일에 있다.
+- 이건 "확장점은 좁고 합성 가능하게 쪼갠다"는 위 패턴의 자연스러운 다음 단계다 - 확장점을 좁게 쪼개는 것만으로는 부족하고, 그 확장점에 "누가 참여하는지"까지 모듈 자신이 스스로 알리게 해야 코어가 각 모듈의 존재를 몰라도 되는 완전한 분리가 이뤄진다.
+
 ## 3. 구현하다가 실제로 발견한 버그들
 
 이 목록 자체가 이 학습 방식(읽기만 하지 않고 직접 짜 보기)이 왜 효과적이었는지를 보여준다 - 전부 "이해했다고 생각했는데 실행해 보니 아니었던" 순간들이다.
@@ -66,10 +79,11 @@
 | 14 | rollback-only 전파를 추가하자 "connection is closed" 오류 | `MiniTransactionInterceptor`가 `commit()`을 `proceed()`의 `try` 안에 둬서, `commit()`이 던진 예외를 "실행 실패"로 오인해 이미 끝난 트랜잭션을 또 롤백하려 함 - `TransactionAspectSupport`처럼 `commit()`을 `try` 밖으로 옮겨 고침 |
 | 15 | Jackson 없이 `@RestController` 테스트가 406/415로 실패, 동시에 인터셉터 순서 테스트에서 `postHandle` 누락 | 하나의 누락된 의존성(Jackson)이 서로 무관해 보이는 두 테스트를 동시에 깨뜨림 - 예외 경로가 `postHandle`을 건너뛰기 때문 |
 | 16 | mini-webmvc에 경로 변수를 추가하자 `/api/users/wrapped`가 이따금 500으로 실패 | `Class#getMethods()`의 순회 순서가 보장되지 않아 `/api/users/{id}`가 먼저 등록되면 `id="wrapped"`로 해석됨 - 15주차에서 확인한 리터럴 vs 변수 경로 specificity 문제가 mini에서 그대로 재발 |
+| 20 | `autoconfigure`/`starter` 모듈에서 `api(project(...))`가 "Unresolved reference: api" 빌드 오류 | 이 저장소의 루트 빌드가 모든 서브모듈에 기본 `java` 플러그인만 적용해서, `java-library`가 제공하는 `api`/`implementation` 구분 자체가 없었음 - 두 모듈에 `` `java-library` ``를 개별 적용해서 해결 |
 
-마지막 두 항목은 특히 인상적이다 - 14주차의 버그는 "TransactionAspectSupport의 실제 구조를 다시 확인해서" 고쳤고, 16주차의 버그는 "15주차에 이미 배운 교훈"이 새 기능을 추가하자마자 다시 검증을 요구한 사례다. 매주 배운 것이 다음 주로 그냥 넘어가는 게 아니라, 코드를 확장할 때마다 다시 시험대에 오른다.
+마지막 세 항목은 특히 인상적이다 - 14주차의 버그는 "TransactionAspectSupport의 실제 구조를 다시 확인해서" 고쳤고, 16주차의 버그는 "15주차에 이미 배운 교훈"이 새 기능을 추가하자마자 다시 검증을 요구한 사례고, 20주차의 버그는 16주 내내 단일 계층 모듈만 다루다가 처음으로 진짜 멀티모듈 라이브러리를 만들면서 마주친, 이 저장소 자체의 구조적 한계였다. 반대로 17~19주차는 실행 결과가 예측과 어긋난 적은 있어도(예: `@ConditionalOnClass`가 클래스를 초기화하지 않는다는 것) 버그 자체는 하나도 없었다 - 코드를 쓰기 전에 실제 릴리스 소스를 먼저 읽고 근거를 확보하는 습관이 굳어진 뒤였기 때문이라고 본다. 매주 배운 것이 다음 주로 그냥 넘어가는 게 아니라, 코드를 확장할 때마다 다시 시험대에 오른다.
 
-## 4. 로드맵이 제시한 4가지 핵심 주제에 대한 답
+## 4. 로드맵이 제시한 핵심 주제에 대한 답
 
 ### Spring은 어떻게 확장 가능한 객체 생성 파이프라인을 만들었는가?
 
@@ -86,6 +100,10 @@
 ### `DispatcherServlet`은 다양한 컨트롤러 호출 방식을 어떻게 추상화하는가?
 
 `DispatcherServlet` 자신은 "핸들러가 무엇인지" 전혀 모른다(15주차) - `HandlerMapping`이 핸들러를 찾고, 그 핸들러의 "형태"를 아는 `HandlerAdapter`가 실제 호출을 담당한다. 애노테이션 기반 컨트롤러(`HandlerMethod`)의 경우 그 호출 자체도 다시 `ArgumentResolver`(인자 채우기)와 `ReturnValueHandler`+`ResponseBodyAdvice`(응답 만들기)로 잘게 쪼개져 있다(16주차). 결과적으로 `DispatcherServlet`부터 시작하는 요청 처리 전체가, 각자 좁은 책임을 지는 확장점들의 체인일 뿐 하나의 거대한 로직 덩어리가 아니라는 것이 이번 학습에서 가장 분명해진 그림이다.
+
+### Spring Boot는 Framework 위에서 무엇을 자동화하는가?
+
+로드맵의 학습 목표에 처음부터 있었지만 핵심 16주만으로는 답할 수 없던 질문이다. 17~20주차를 마치고 나니 답은 "새로운 프레임워크가 아니라, Spring Framework가 이미 제공하는 확장점들을 자동으로 배선해 주는 것"이었다 - `@EnableAutoConfiguration`은 Spring Framework 코어의 `@Import`(그중에서도 `DeferredImportSelector`, 18주차)일 뿐이고, `Condition`(19주차)도 Spring Framework 코어 인터페이스다. Boot가 실제로 새로 만든 것은 `.imports` 파일 기반 후보 탐색(`ImportCandidates`)과 `@ConditionalOnXxx`라는 조건 구현체들, 그리고 이 둘을 "사용자가 명시적으로 설정한 것이 없으면"이라는 규칙으로 엮는 관례(`@ConditionalOnMissingBean`)뿐이다 - 17주차에서 확인했듯 `SpringApplication.run()` 자체도 `AnnotationConfigApplicationContext` 없이는 아무것도 아니다. Boot는 Framework 위에 얹힌 아주 얇고 정교한 자동 배선 계층이다.
 
 ## 5. Mini Spring Framework 지도
 
@@ -110,6 +128,8 @@ mini-webmvc (15~16주차, project 27)
 
 이 의존 구조 자체가 4번의 답을 그대로 반영한다 - `mini-auto-proxy`가 "빈 생성 후처리"(mini-container)와 "인터셉터 체인"(mini-aop)을 잇는 지점이라는 것, `mini-transaction`이 그 인터셉터 체인 위에 정책 하나를 얹은 것뿐이라는 것.
 
+**mini-spring 트랙은 `mini-webmvc`(16주차)에서 끝난다.** 17~19주차(`SpringApplication`, 자동 설정, 조건부 설정)는 로직의 복잡도가 아니라 **타이밍**(언제 이벤트가 발행되는지, 언제 후보가 평가되는지)이 핵심이라, 축소 재구현보다 실제 릴리스 소스를 읽고 실행으로 확인하는 쪽이 학습 효율이 높다고 각 문서 10번 절에서 판단했다. 대신 20주차의 `mini-observability-starter`는 "mini"라는 이름이 붙었지만 성격이 다르다 - 메커니즘을 축소 재구현한 것이 아니라, 17~19주차에서 배운 실제 메커니즘(`.imports` 탐색, `Condition` 평가, `ObjectProvider` 기반 안전한 조건부 배선)을 그대로 사용해 만든 **진짜 동작하는 3모듈 Spring Boot 라이브러리**다.
+
 ## 6. 학습 완료 기준 자가 점검
 
 `docs/plan/01-roadmap.md`의 기준을 그대로 가져와 각 항목의 근거를 링크한다.
@@ -131,14 +151,22 @@ mini-webmvc (15~16주차, project 27)
 - `@Transactional` 호출 흐름과 전파 속성: [13주차](../13-transactional-internals/transactional-internals.md), [14주차](../14-transaction-propagation/transaction-propagation.md)
 - `DispatcherServlet`부터 응답 직렬화까지: [15주차](../15-dispatcher-servlet/dispatcher-servlet.md), [16주차](../16-controller-invocation/controller-invocation.md)
 - Spring 내부에 직접 브레이크포인트 설정: `tools/jdi-tracer`로 1·3주차에서 실제 사용 - 이후 주차는 실행 결과(공식 테스트 재현)와 소스 확인으로 대체하는 경우가 많아졌다(효율을 위한 의도적 선택, 각 문서 7번 절에 명시)
-- 단순 사용법이 아니라 설계 의도 설명: 각 문서의 11번 절("Spring 설계 의도") 16개 전부
+- 단순 사용법이 아니라 설계 의도 설명: 각 문서의 11번 절("Spring 설계 의도") 20개 전부
 
-## 7. 남겨 둔 질문과 다음 단계
+**선택 과정(17~20주차)**은 로드맵의 "학습 완료 기준"에 별도 항목으로 명시돼 있지는 않지만, 로드맵 최상단의 학습 목표 중 하나("Spring Boot는 Framework 위에서 무엇을 자동화하는가?")를 4번 절에서 완결지었고, `SpringApplication`/자동 설정/조건부 설정/Starter 조립까지 전부 실행 결과와 실제 릴리스 소스로 뒷받침했다.
+
+## 7. 남겨 둔 질문
 
 의도적으로 범위 밖에 둔 것들(각 문서 10번 절에 기록됨) 중 특히 다시 다뤄볼 만한 것:
 
+**핵심 16주에서**
 - mini 구현들의 일관된 생략: JSON 실제 역직렬화(mini-webmvc), CGLIB 상당 서브클래스 프록시(mini-aop), NESTED 전파(mini-transaction), `@ControllerAdvice` 전역 예외 처리(mini-webmvc) - 전부 "핵심 메커니즘을 이해하는 데는 필요 없었던" 것들이다.
 - 7주차에서 남긴 ASM 기반 컴포넌트 스캔의 실제 성능/안전성 비교는 시도하지 않았다.
 - 16주차에서 발견한 mini-webmvc의 인자 리졸버 캐싱 부재는 정확성에는 영향 없지만 실제라면 성능 이슈가 됐을 것이다.
 
-다음은 로드맵의 선택 과정(17~20주차, Spring Boot 내부 - `SpringApplication`, 자동 설정, 조건부 설정, 직접 만드는 Starter)이다. 이 16주가 확인한 확장점들(`BeanFactoryPostProcessor`, `BeanPostProcessor`, `Condition`)이 Spring Boot의 자동 설정 메커니즘에서 그대로 다시 등장할 것으로 예상한다.
+**선택 4주에서**
+- 17주차에서 미룬 "웹 서버가 실제로 언제 뜨는가"는 자동 설정(18주차) 없이는 관찰할 수 없어서 미뤘는데, 20주차에서 실제 웹 자동 설정을 통합했지만 이 관찰 자체는 별도로 다시 다루지 않았다.
+- 20주차의 `mini-observability-starter`는 실제 Micrometer `ObservationRegistry` 연동 대신 인메모리 `ObservationLog`로 단순화했다 - 관찰 결과를 테스트에서 직접 조회하기 위한 의도적 선택이었지만, 실제 프로덕션 스타터라면 이 자리가 핵심이다.
+- 카탈로그의 project 23(Transactional Outbox), 28(Error Handling Pipeline), 29~30(Application Event Bus/Mini Event Multicaster)는 여전히 미착수다 - 이벤트 시스템과 예외 처리 파이프라인은 이번 20주 어디에서도 전용 주제로 다루지 않았다.
+
+이것으로 로드맵의 20주 전체(핵심 16주 + 선택 4주)가 마무리된다. 남은 것은 위 목록의 개별 항목들을 골라 더 깊이 파는 것뿐이다.
