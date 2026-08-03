@@ -109,7 +109,7 @@ postProcessAfterInitialization(bean, beanName)
 
 ## 7. 브레이크포인트
 
-이번 주제는 실행 결과(8번)로 검증했고 `tools/jdi-tracer`로 직접 추적하지는 않았다.
+이번 주제는 처음에는 실행 결과(8번)로만 검증했지만, 이후 `tools/jdi-tracer`로 자동 프록시 생성 경로 전체를 실제 브레이크포인트로 추적하는 세션을 진행했다(아래 7.1). 애초에 예정했던 브레이크포인트 대상:
 
 ```text
 org.springframework.context.support.PostProcessorRegistrationDelegate#registerBeanPostProcessors
@@ -117,6 +117,30 @@ org.springframework.aop.framework.autoproxy.AbstractAdvisorAutoProxyCreator#find
 org.springframework.aop.framework.autoproxy.BeanFactoryAdvisorRetrievalHelper#findAdvisorBeans
 org.springframework.aop.support.AopUtils#canApply
 ```
+
+### 7.1 jdi-tracer 세션 — 자동 프록시 생성 경로 실측
+
+전용 실행 진입점 [`AutoProxyCreationLab`](../../spring-extensions/method-timing-post-processor/src/main/java/lab/ext/timing/AutoProxyCreationLab.java)을 새로 추가해 `AutoProxyTimingConfig`의 컨텍스트를 띄우고(`orderService`/`legacyReport`/`notificationService` 세 빈이 각각 JDK 프록시/CGLIB 프록시/프록시 없음이라는 서로 다른 결과로 끝나는 케이스), 아래 스펙([`tools/jdi-tracer/specs/auto-proxy-creation-lab.txt`](../../tools/jdi-tracer/specs/auto-proxy-creation-lab.txt))으로 `postProcessAfterInitialization`부터 실제 프록시 팩토리 선택까지 전체 경로를 추적했다:
+
+```text
+org.springframework.aop.framework.autoproxy.AbstractAutoProxyCreator#postProcessAfterInitialization,wrapIfNecessary,createProxy
+org.springframework.aop.framework.autoproxy.AbstractAdvisorAutoProxyCreator#getAdvicesAndAdvisorsForBean,findEligibleAdvisors,findCandidateAdvisors
+org.springframework.aop.framework.autoproxy.BeanFactoryAdvisorRetrievalHelper#findAdvisorBeans
+org.springframework.aop.support.AopUtils#canApply
+org.springframework.aop.framework.DefaultAopProxyFactory#createAopProxy
+```
+
+```bash
+./gradlew :tools:jdi-tracer:run --args="\"<target-runtime-classpath>\" lab.ext.timing.AutoProxyCreationLab tools/jdi-tracer/specs/auto-proxy-creation-lab.txt"
+```
+
+38번의 브레이크포인트 히트로 확인한, 소스만 읽어서는 순서가 잘 안 그려지던 것들:
+
+- **컨텍스트에 등록된 첫 번째 대상 빈(`autoProxyTimingConfig` 그 자신)을 평가하는 도중, `Advisor` 빈(`timingAdvisor`)이 재귀적으로, 그것도 전체 빈 생성 파이프라인을 거쳐 즉시 인스턴스화된다.** `findEligibleAdvisors` → `findCandidateAdvisors` → `BeanFactoryAdvisorRetrievalHelper#findAdvisorBeans`(히트 #3~#6)까지는 예상대로였지만, `findAdvisorBeans` 내부에서 `Advisor` 타입의 빈 이름을 `beanFactory.getBean()`으로 조회하는 순간, `timingAdvisor` 빈이 그 자리에서 `createBean → initializeBean → postProcessAfterInitialization`(히트 #7~#8)까지 통째로 거치며 생성된다 — 스택을 보면 이 `postProcessAfterInitialization`(timingAdvisor용)이 **바깥쪽 `findAdvisorBeans` 호출이 아직 리턴하지 않은 채로** 중첩되어 있다(히트 #7의 10번 프레임이 `BeanFactoryAdvisorRetrievalHelper#findAdvisorBeans`). "Advisor를 먼저 다 모아 놓고 나중에 순회한다"는 직관과 달리, 첫 대상 빈을 처리하는 그 순간에 필요한 Advisor들이 지연 생성된다.
+- **`Advisor` 빈 자신은 `wrapIfNecessary`까지는 들어가지만 `getAdvicesAndAdvisorsForBean`은 절대 호출되지 않는다.** 히트 #8(`timingAdvisor`의 `wrapIfNecessary`) 다음에 바로 히트 #9(`autoProxyTimingConfig`를 위한 `canApply`)로 넘어간다 — `timingAdvisor` 자신을 위한 advisor 탐색은 아예 일어나지 않았다는 뜻이다. `AbstractAutoProxyCreator#wrapIfNecessary` 소스(361행)를 보면 `isInfrastructureClass(bean.getClass())` 체크가 `getAdvicesAndAdvisorsForBean` 호출보다 먼저 있고, `Advisor.class.isAssignableFrom(...)`이면 그 자리에서 바로 원본을 반환한다 — "Advisor는 스스로 프록시 대상에서 제외된다"(2번 절에서 이미 공식 문서로 확인한 문장)는 게 소스상 이 한 줄의 조기 반환이라는 것을, 실제로 `getAdvicesAndAdvisorsForBean` 브레이크포인트가 `timingAdvisor`에 대해서는 단 한 번도 히트하지 않는 것으로 직접 확인했다.
+- **두 번째 대상 빈(`legacyReport`)부터는 `findAdvisorBeans`가 다시 호출되지만(히트 #16) 더 이상 `timingAdvisor`를 재생성하지 않는다** — 이미 싱글톤 레지스트리에 등록된 인스턴스를 그대로 돌려주기 때문이다. 즉 "매 빈마다 advisor 탐색 자체는 반복되지만, advisor 빈의 인스턴스화는 정확히 한 번뿐"이라는 것을 히트 #6(최초, 재귀 생성 동반)과 히트 #16/#26/#34(이후, 재생성 없음)의 대비로 확인했다.
+- **`notificationServiceImpl`은 `createProxy`에 도달하지 못하고 다음 빈으로 넘어간다.** 히트 #23~#28(`getAdvicesAndAdvisorsForBean` → `findEligibleAdvisors` → ... → `canApply` 두 번)까지 진행되지만, `createProxy` 히트 없이 바로 히트 #29(다음 빈 `orderServiceImpl`의 `postProcessAfterInitialization`)로 넘어간다 — `canApply(advisor, NotificationServiceImpl.class)`가 `false`를 반환해서 `getAdvicesAndAdvisorsForBean`이 `DO_NOT_PROXY`를 돌려줬고, `wrapIfNecessary`가 `createProxy`를 호출조차 하지 않았다는 뜻이다(실행 결과로 이미 알던 "프록시 안 됨"이, 정확히 어느 호출이 생략되는지까지 이번에 확인됐다).
+- **`legacyReport`와 `orderServiceImpl`은 완전히 같은 호출 순서(`createProxy` → `buildProxy` → `ProxyFactory#getProxy` → `ProxyCreatorSupport#createAopProxy` → `DefaultAopProxyFactory#createAopProxy`)를 거치지만, 그 안에서 JDK/CGLIB 중 무엇을 고를지는 `DefaultAopProxyFactory#createAopProxy`에 전달된 `config`(`ProxyFactory`, 그 안에 원본 `beanClass`가 인터페이스를 구현하는지 여부가 담김) 하나로 갈린다** — 히트 #20/#38이 정확히 같은 위치에서 멈추지만, `legacyReport`(인터페이스 없음) 뒤에는 최종적으로 `AopUtils.isCglibProxy()`가 `true`, `orderServiceImpl`(인터페이스 있음) 뒤에는 `AopUtils.isAopProxy()`만 `true`(CGLIB가 아님, 즉 JDK 프록시)로 갈리는 것을 프로그램 출력으로 함께 확인했다 - 분기 자체는 이 메서드 안(소스로 재확인: `config.isProxyTargetClass() || !config.hasUserSuppliedInterfaces()`이면 대상 클래스가 인터페이스/프록시/람다가 아닌 한 CGLIB, 그렇지 않으면 JDK)에 있지만, 두 빈이 정확히 같은 코드 경로를 타다가 이 지점에서만 갈린다는 것을 나란히 보는 게 이번 세션의 핵심이었다.
 
 ## 8. 런타임 관찰
 

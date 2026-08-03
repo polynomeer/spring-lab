@@ -1,0 +1,8 @@
+# AOP automatic proxy creation path for spring-extensions/method-timing-post-processor's
+# AutoProxyCreationLab. See docs/plan/01-roadmap.md (11-12주차) and
+# docs/12-auto-proxy-creator/auto-proxy-creator.md for the session write-up.
+org.springframework.aop.framework.autoproxy.AbstractAutoProxyCreator#postProcessAfterInitialization,wrapIfNecessary,createProxy
+org.springframework.aop.framework.autoproxy.AbstractAdvisorAutoProxyCreator#getAdvicesAndAdvisorsForBean,findEligibleAdvisors,findCandidateAdvisors
+org.springframework.aop.framework.autoproxy.BeanFactoryAdvisorRetrievalHelper#findAdvisorBeans
+org.springframework.aop.support.AopUtils#canApply
+org.springframework.aop.framework.DefaultAopProxyFactory#createAopProxy
