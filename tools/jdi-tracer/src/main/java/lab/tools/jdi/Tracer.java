@@ -1,18 +1,13 @@
 package lab.tools.jdi;
 
 import com.sun.jdi.AbsentInformationException;
-import com.sun.jdi.Bootstrap;
 import com.sun.jdi.IncompatibleThreadStateException;
 import com.sun.jdi.LocalVariable;
 import com.sun.jdi.Location;
-import com.sun.jdi.Method;
-import com.sun.jdi.ReferenceType;
 import com.sun.jdi.StackFrame;
 import com.sun.jdi.ThreadReference;
 import com.sun.jdi.Value;
 import com.sun.jdi.VirtualMachine;
-import com.sun.jdi.connect.Connector;
-import com.sun.jdi.connect.LaunchingConnector;
 import com.sun.jdi.event.BreakpointEvent;
 import com.sun.jdi.event.ClassPrepareEvent;
 import com.sun.jdi.event.Event;
@@ -20,7 +15,6 @@ import com.sun.jdi.event.EventQueue;
 import com.sun.jdi.event.EventSet;
 import com.sun.jdi.event.VMDeathEvent;
 import com.sun.jdi.event.VMDisconnectEvent;
-import com.sun.jdi.request.BreakpointRequest;
 import com.sun.jdi.request.ClassPrepareRequest;
 import com.sun.jdi.request.EventRequestManager;
 
@@ -28,13 +22,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Launches a target Java program under a JDI-controlled child JVM, sets
@@ -63,14 +53,9 @@ public final class Tracer {
 
         String targetClasspath = args[0];
         String targetMainClass = args[1];
-        Map<String, Set<String>> targets = parseTargets(args, 2);
+        Map<String, Set<String>> targets = JdiSupport.parseTargets(args, 2);
 
-        LaunchingConnector connector = Bootstrap.virtualMachineManager().defaultConnector();
-        Map<String, Connector.Argument> arguments = connector.defaultArguments();
-        arguments.get("main").setValue(targetMainClass);
-        arguments.get("options").setValue("-cp " + targetClasspath);
-
-        VirtualMachine vm = connector.launch(arguments);
+        VirtualMachine vm = JdiSupport.launch(targetClasspath, targetMainClass);
 
         EventRequestManager requestManager = vm.eventRequestManager();
         for (String className : targets.keySet()) {
@@ -92,7 +77,7 @@ public final class Tracer {
             EventSet eventSet = queue.remove();
             for (Event event : eventSet) {
                 if (event instanceof ClassPrepareEvent classPrepareEvent) {
-                    enableBreakpoints(requestManager, classPrepareEvent.referenceType(), targets);
+                    JdiSupport.enableBreakpoints(requestManager, classPrepareEvent.referenceType(), targets);
                 } else if (event instanceof BreakpointEvent breakpointEvent) {
                     hitCount++;
                     printHit(hitCount, breakpointEvent);
@@ -106,48 +91,6 @@ public final class Tracer {
         }
         process.waitFor();
         System.out.println("\n=== target process exited, total breakpoint hits: " + hitCount + " ===");
-    }
-
-    private static Map<String, Set<String>> parseTargets(String[] args, int fromIndex) throws IOException {
-        Map<String, Set<String>> targets = new LinkedHashMap<>();
-        for (int i = fromIndex; i < args.length; i++) {
-            String arg = args[i];
-            Path path = Path.of(arg);
-            List<String> specLines = Files.isRegularFile(path)
-                    ? Files.readAllLines(path)
-                    : List.of(arg);
-
-            for (String line : specLines) {
-                String spec = line.strip();
-                if (spec.isEmpty() || spec.startsWith("#")) {
-                    continue;
-                }
-                String[] parts = spec.split("#", 2);
-                if (parts.length != 2) {
-                    throw new IllegalArgumentException("Invalid breakpoint spec (expected Class#method1,method2): " + spec);
-                }
-                Set<String> methodNames = Set.of(parts[1].split(","));
-                targets.merge(parts[0], methodNames, (a, b) ->
-                        java.util.stream.Stream.concat(a.stream(), b.stream()).collect(Collectors.toSet()));
-            }
-        }
-        return targets;
-    }
-
-    private static void enableBreakpoints(EventRequestManager requestManager, ReferenceType refType,
-                                           Map<String, Set<String>> targets) {
-        Set<String> methodNames = targets.get(refType.name());
-        if (methodNames == null) {
-            return;
-        }
-        for (String methodName : methodNames) {
-            for (Method method : refType.methodsByName(methodName)) {
-                if (!method.isAbstract() && !method.isNative()) {
-                    BreakpointRequest request = requestManager.createBreakpointRequest(method.location());
-                    request.enable();
-                }
-            }
-        }
     }
 
     private static void printHit(int n, BreakpointEvent event) throws IncompatibleThreadStateException {
