@@ -32,4 +32,5 @@ include(
     "spring-extensions:mini-observability-starter:starter",
     "sample-app:transactional-outbox-order",
     "tools:jdi-tracer",
+    "tools:learning-dashboard:backend",
 )
