@@ -1,0 +1,7 @@
+# 3-level cache + AOP proxy pre-decision (getEarlyBeanReference) for
+# experiments/circular-dependency-lab's CircularDependencyLab. See
+# docs/10-primary-qualifier-circular/primary-qualifier-circular.md and
+# docs/plan/03-learning-dashboard-design.md 6.1절.
+org.springframework.beans.factory.support.DefaultSingletonBeanRegistry#addSingletonFactory
+org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory#getEarlyBeanReference,populateBean
+org.springframework.aop.framework.autoproxy.AbstractAutoProxyCreator#getEarlyBeanReference
