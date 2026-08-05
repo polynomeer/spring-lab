@@ -44,4 +44,18 @@ subprojects {
         add("testRuntimeOnly", rootLibs.findLibrary("junit-platform-launcher").get())
         add("testImplementation", rootLibs.findLibrary("assertj-core").get())
     }
+
+    // jdi-tracer 세션마다(그리고 이제 learning-dashboard의 ClasspathResolver도) "이 모듈의
+    // main 런타임 클래스패스"가 필요한데, 매번 throwaway init script로 즉석에서 만들어 왔다.
+    // 대상 모듈이라면 어디서든 재사용할 수 있게 여기 한 번만 등록해 둔다.
+    tasks.register("printRuntimeClasspath") {
+        group = "help"
+        description = "Prints this module's main runtime classpath, one entry-set per line."
+        doLast {
+            val sourceSets = project.extensions.findByType(SourceSetContainer::class.java)
+            if (sourceSets != null) {
+                println(sourceSets.getByName("main").runtimeClasspath.asPath)
+            }
+        }
+    }
 }

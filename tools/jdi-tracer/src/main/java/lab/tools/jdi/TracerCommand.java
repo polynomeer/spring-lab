@@ -7,8 +7,8 @@ package lab.tools.jdi;
  */
 public record TracerCommand(String cmd, Long intervalMs) {
 
-    static final String STEP = "step";
-    static final String PLAY = "play";
-    static final String PAUSE = "pause";
-    static final String QUIT = "quit";
+    public static final String STEP = "step";
+    public static final String PLAY = "play";
+    public static final String PAUSE = "pause";
+    public static final String QUIT = "quit";
 }
