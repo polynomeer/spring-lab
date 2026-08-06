@@ -2,8 +2,9 @@ package lab.dashboard.interpret;
 
 import lab.tools.jdi.TraceEvent;
 
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -16,6 +17,12 @@ import java.util.Optional;
  * 지원하지 않는다) - 그래서 "빈이 완전히 초기화됐다"는 사실은 이 해석기가 만들어내지
  * 않는다. 실제로 관찰 가능한 사실(생성 시작, 3차 캐시 등록, 조기 참조 요청/프록시화,
  * 프로퍼티 주입 시작, 초기화 시작)만 옮긴다.
+ *
+ * <p>그래프 시각화가 "누가 누구를 의존하는가"(엣지)를 그리려면 조기 참조 요청이 "어느 빈을
+ * 채우던 도중" 일어났는지가 필요하다 - {@code populateBean}이 마지막으로 지나간 빈 이름을
+ * 기억해 뒀다가, 그 직후 {@code getEarlyBeanReference}가 오면 {@code requestedBy}로 함께
+ * 실어 보낸다. 실제 CircularDependencyLab 20개 히트 트레이스에서 이 순서(B를 채우다가 A의
+ * 조기 참조를 요청)가 정확히 그렇게 일어나는 것을 확인했다(BeanLifecycleInterpreterTest).
  */
 public final class BeanLifecycleInterpreter implements ScenarioInterpreter {
 
@@ -26,34 +33,45 @@ public final class BeanLifecycleInterpreter implements ScenarioInterpreter {
     public static final String PROPERTY_INJECTION_STARTED = "PROPERTY_INJECTION_STARTED";
     public static final String BEAN_INITIALIZATION_STARTED = "BEAN_INITIALIZATION_STARTED";
 
+    private String currentlyPopulatingBean;
+
     @Override
     public List<SemanticEvent> onHit(TraceEvent hit) {
         String className = simpleName(hit.location().className());
         String methodName = hit.location().methodName();
-        List<SemanticEvent> events = new ArrayList<>();
 
-        switch (className + "#" + methodName) {
+        return switch (className + "#" + methodName) {
             case "AbstractAutowireCapableBeanFactory#createBean" ->
-                    beanName(hit).ifPresent(name -> events.add(withBeanName(BEAN_CREATION_STARTED, hit, name)));
+                    beanName(hit).map(name -> List.of(withBeanName(BEAN_CREATION_STARTED, hit, name))).orElse(List.of());
             case "DefaultSingletonBeanRegistry#addSingletonFactory" ->
-                    beanName(hit).ifPresent(name -> events.add(withBeanName(SINGLETON_FACTORY_REGISTERED, hit, name)));
+                    beanName(hit).map(name -> List.of(withBeanName(SINGLETON_FACTORY_REGISTERED, hit, name))).orElse(List.of());
             case "AbstractAutowireCapableBeanFactory#getEarlyBeanReference" ->
-                    beanName(hit).ifPresent(name -> events.add(withBeanName(EARLY_REFERENCE_REQUESTED, hit, name)));
+                    beanName(hit).map(name -> List.of(withRequestedBy(EARLY_REFERENCE_REQUESTED, hit, name))).orElse(List.of());
             case "AbstractAutoProxyCreator#getEarlyBeanReference" ->
-                    beanName(hit).ifPresent(name -> events.add(withBeanName(EARLY_REFERENCE_PROXIED, hit, name)));
-            case "AbstractAutowireCapableBeanFactory#populateBean" ->
-                    beanName(hit).ifPresent(name -> events.add(withBeanName(PROPERTY_INJECTION_STARTED, hit, name)));
-            case "AbstractAutowireCapableBeanFactory#initializeBean" ->
-                    beanName(hit).ifPresent(name -> events.add(withBeanName(BEAN_INITIALIZATION_STARTED, hit, name)));
-            default -> {
-                // 이 시나리오가 관심 없는 히트(예: getSingleton의 순수 캐시 조회) - 무시한다.
+                    beanName(hit).map(name -> List.of(withRequestedBy(EARLY_REFERENCE_PROXIED, hit, name))).orElse(List.of());
+            case "AbstractAutowireCapableBeanFactory#populateBean" -> {
+                Optional<String> name = beanName(hit);
+                name.ifPresent(value -> currentlyPopulatingBean = value);
+                yield name.map(value -> List.of(withBeanName(PROPERTY_INJECTION_STARTED, hit, value))).orElse(List.of());
             }
-        }
-        return events;
+            case "AbstractAutowireCapableBeanFactory#initializeBean" ->
+                    beanName(hit).map(name -> List.of(withBeanName(BEAN_INITIALIZATION_STARTED, hit, name))).orElse(List.of());
+            // 이 시나리오가 관심 없는 히트(예: getSingleton의 순수 캐시 조회) - 무시한다.
+            default -> List.of();
+        };
     }
 
     private static SemanticEvent withBeanName(String type, TraceEvent hit, String beanName) {
         return SemanticEvent.of(type, hit.hitId(), "beanName", beanName);
+    }
+
+    private SemanticEvent withRequestedBy(String type, TraceEvent hit, String beanName) {
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("beanName", beanName);
+        if (currentlyPopulatingBean != null && !currentlyPopulatingBean.equals(beanName)) {
+            attributes.put("requestedBy", currentlyPopulatingBean);
+        }
+        return new SemanticEvent(type, hit.hitId(), attributes);
     }
 
     private static Optional<String> beanName(TraceEvent hit) {

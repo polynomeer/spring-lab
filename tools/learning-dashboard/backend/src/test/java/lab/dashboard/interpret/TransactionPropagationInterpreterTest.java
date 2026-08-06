@@ -31,15 +31,23 @@ class TransactionPropagationInterpreterTest {
 
         List<SemanticEvent> events = hits.stream().flatMap(hit -> interpreter.onHit(hit).stream()).toList();
 
+        String outer = "lab.experiments.tx.OrderServiceImpl.placeOrderInnerRequiresNew";
+        String inner = "lab.experiments.tx.PaymentServiceImpl.payRequiresNew";
+
+        // 스윔레인 시각화가 "이 이벤트가 어느 레인 소속인가"를 알 수 있도록, suspend/resume/
+        // commit도 그 시점에 진행 중이던 joinpointIdentification을 함께 실어 보낸다 - 특히
+        // hit14의 resume은 inner의 커밋 정리 절차 안에서 일어나지만, 실제로 다시 활성화되는
+        // 건 outer이므로 outer로 귀속돼야 한다(LIFO 스택이 hit13에서 이미 inner를 pop한 뒤라
+        // 정확히 그렇게 된다).
         assertThat(events)
-                .extracting(SemanticEvent::type, SemanticEvent::sourceHitId)
+                .extracting(SemanticEvent::type, SemanticEvent::sourceHitId, e -> e.attributes().get("joinpointIdentification"))
                 .containsExactly(
-                        tuple(TransactionPropagationInterpreter.TX_STARTED, 3),
-                        tuple(TransactionPropagationInterpreter.TX_STARTED, 8),
-                        tuple(TransactionPropagationInterpreter.TX_SUSPENDED, 10),
-                        tuple(TransactionPropagationInterpreter.TX_COMMITTED, 13),
-                        tuple(TransactionPropagationInterpreter.TX_RESUMED, 14),
-                        tuple(TransactionPropagationInterpreter.TX_COMMITTED, 17));
+                        tuple(TransactionPropagationInterpreter.TX_STARTED, 3, outer),
+                        tuple(TransactionPropagationInterpreter.TX_STARTED, 8, inner),
+                        tuple(TransactionPropagationInterpreter.TX_SUSPENDED, 10, inner),
+                        tuple(TransactionPropagationInterpreter.TX_COMMITTED, 13, inner),
+                        tuple(TransactionPropagationInterpreter.TX_RESUMED, 14, outer),
+                        tuple(TransactionPropagationInterpreter.TX_COMMITTED, 17, outer));
     }
 
     @Test
@@ -55,13 +63,17 @@ class TransactionPropagationInterpreterTest {
 
         List<SemanticEvent> events = hits.stream().flatMap(hit -> interpreter.onHit(hit).stream()).toList();
 
+        String outer = "lab.experiments.tx.OrderServiceImpl.placeOrderCatchingInnerRequiredFailure";
+        String inner = "lab.experiments.tx.PaymentServiceImpl.payRequired";
+
         assertThat(events)
-                .extracting(SemanticEvent::type, e -> e.attributes().get("unexpected"), SemanticEvent::sourceHitId)
+                .extracting(SemanticEvent::type, e -> e.attributes().get("unexpected"),
+                        e -> e.attributes().get("joinpointIdentification"), SemanticEvent::sourceHitId)
                 .containsExactly(
-                        tuple(TransactionPropagationInterpreter.TX_STARTED, null, 20),
-                        tuple(TransactionPropagationInterpreter.TX_STARTED, null, 25),
-                        tuple(TransactionPropagationInterpreter.TX_ROLLED_BACK, "false", 29),
-                        tuple(TransactionPropagationInterpreter.TX_ROLLED_BACK, "true", 32));
+                        tuple(TransactionPropagationInterpreter.TX_STARTED, null, outer, 20),
+                        tuple(TransactionPropagationInterpreter.TX_STARTED, null, inner, 25),
+                        tuple(TransactionPropagationInterpreter.TX_ROLLED_BACK, "false", inner, 29),
+                        tuple(TransactionPropagationInterpreter.TX_ROLLED_BACK, "true", outer, 32));
     }
 
     private static TraceEvent createTransactionIfNecessary(int hitId, String joinpointIdentification) {

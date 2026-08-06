@@ -44,8 +44,10 @@ class BeanLifecycleInterpreterTest {
         // populateBean(proxiedCircularB)이 proxiedCircularA를 조기 참조로 요청하게 만들고,
         // 그 요청이 AbstractAutoProxyCreator에 의해 프록시로 바뀐다는 것 - 이게 바로
         // "조기 참조 == 최종 프록시"(docs/10-primary-qualifier-circular)의 관찰 지점이다.
-        assertThat(events.get(4).attributes()).containsEntry("beanName", "proxiedCircularA");
-        assertThat(events.get(5).attributes()).containsEntry("beanName", "proxiedCircularA");
+        // requestedBy가 "proxiedCircularB"인 것은, 그래프 시각화의 엣지(B → A)가 바로 이
+        // 속성에서 나온다는 뜻이다.
+        assertThat(events.get(4).attributes()).containsEntry("beanName", "proxiedCircularA").containsEntry("requestedBy", "proxiedCircularB");
+        assertThat(events.get(5).attributes()).containsEntry("beanName", "proxiedCircularA").containsEntry("requestedBy", "proxiedCircularB");
         assertThat(events.get(4).sourceHitId()).isEqualTo(19);
         assertThat(events.get(5).sourceHitId()).isEqualTo(20);
     }
