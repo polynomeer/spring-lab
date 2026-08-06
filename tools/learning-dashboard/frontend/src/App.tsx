@@ -9,8 +9,7 @@ import { TransportControls } from "./components/TransportControls";
 import { useDashboardSocket } from "./stomp/useDashboardSocket";
 import type { ScenarioMessage, ScenarioMeta, SemanticEvent, TraceEvent } from "./types";
 
-// lab.dashboard.session.ScenarioCatalog(백엔드)에 실제 등록된 이름과 정확히 일치해야 한다 -
-// dispatcher-flow는 아직 라이브 Lab이 없어(4단계 예정) live: false로 비활성 처리한다.
+// lab.dashboard.session.ScenarioCatalog(백엔드)에 실제 등록된 이름과 정확히 일치해야 한다.
 const SCENARIOS: ScenarioMeta[] = [
   {
     key: "bean-lifecycle",
@@ -33,8 +32,8 @@ const SCENARIOS: ScenarioMeta[] = [
   {
     key: "dispatcher-flow",
     title: "DispatcherServlet 요청 흐름",
-    description: "임베디드 서버 + 요청 주입 인프라가 아직 없어 라이브로 실행할 수 없다(설계 문서 4단계 예정).",
-    live: false,
+    description: "임베디드 Tomcat에 실제 HTTP 요청을 쏴서, doDispatch → HandlerMapping → Interceptor → Controller(→ 예외 시 ExceptionResolver) 순서로 파이프라인이 채워지는 걸 지켜본다.",
+    live: true,
   },
 ];
 
@@ -56,7 +55,7 @@ export default function App() {
     }
   }, []);
 
-  const { connected, startScenario, sendCommand } = useDashboardSocket(handleMessage);
+  const { connected, startScenario, sendCommand, sendHttpRequest } = useDashboardSocket(handleMessage);
 
   const hits = useMemo(() => log.filter((entry) => entry.type === "hit"), [log]);
   const hitCount = hits.length;
@@ -119,7 +118,12 @@ export default function App() {
           />
 
           <div className="viewport">
-            <ScenarioVisualization scenarioKey={activeScenario} semanticEvents={semanticEvents} />
+            <ScenarioVisualization
+              scenarioKey={activeScenario}
+              semanticEvents={semanticEvents}
+              connected={connected}
+              onSendRequest={sendHttpRequest}
+            />
           </div>
         </div>
 

@@ -54,5 +54,15 @@ export function useDashboardSocket(onMessage: (message: ScenarioMessage) => void
     });
   }, []);
 
-  return { connected, startScenario, sendCommand };
+  // dispatcher-flow(6.4절)의 "요청 보내기" - 백엔드가 지금 실행 중인 시나리오의 임베디드
+  // 서버로 실제 HTTP 요청을 대신 쏴 준다(브라우저가 직접 쏘지 않는다 - 대상 포트는 매번
+  // 랜덤이고 백엔드만 안다).
+  const sendHttpRequest = useCallback((method: string, path: string, body?: string) => {
+    clientRef.current?.publish({
+      destination: "/app/scenario/http-request",
+      body: JSON.stringify({ method, path, body: body ?? null }),
+    });
+  }, []);
+
+  return { connected, startScenario, sendCommand, sendHttpRequest };
 }

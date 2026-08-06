@@ -3,6 +3,7 @@ package lab.dashboard.web;
 import lab.dashboard.session.RawHitReceived;
 import lab.dashboard.session.ScenarioCatalog;
 import lab.dashboard.session.ScenarioExited;
+import lab.dashboard.session.ScenarioHttpResponseReceived;
 import lab.dashboard.session.ScenarioSession;
 import lab.dashboard.session.ScenarioStdoutReceived;
 import lab.dashboard.session.SemanticEventReceived;
@@ -13,6 +14,7 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -46,6 +48,11 @@ public class ScenarioWebSocketController {
         session.sendCommand(request.cmd(), request.intervalMs());
     }
 
+    @MessageMapping("/scenario/http-request")
+    public void httpRequest(ScenarioHttpRequestCommand request) {
+        session.sendHttpRequest(request.method(), request.path(), request.body());
+    }
+
     @EventListener
     public void onRawHit(RawHitReceived event) {
         messagingTemplate.convertAndSend("/topic/scenario",
@@ -68,5 +75,23 @@ public class ScenarioWebSocketController {
     public void onExited(ScenarioExited event) {
         messagingTemplate.convertAndSend("/topic/scenario",
                 Map.of("type", "exited", "scenario", event.scenarioName(), "totalHits", event.totalHits()));
+    }
+
+    @EventListener
+    public void onHttpResponse(ScenarioHttpResponseReceived event) {
+        // status/error가 서로 배타적이라(ScenarioHttpResponseReceived 참고) Map.of는 못 쓴다 -
+        // null 값을 넣을 수 없어서 HashMap으로 있는 필드만 채운다.
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("type", "httpResponse");
+        payload.put("scenario", event.scenarioName());
+        payload.put("method", event.method());
+        payload.put("path", event.path());
+        if (event.status() != null) {
+            payload.put("status", event.status());
+        }
+        if (event.error() != null) {
+            payload.put("error", event.error());
+        }
+        messagingTemplate.convertAndSend("/topic/scenario", payload);
     }
 }

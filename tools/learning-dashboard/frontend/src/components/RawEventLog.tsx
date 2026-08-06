@@ -72,6 +72,19 @@ export function RawEventLog({ entries, onSelectHit }: Props) {
             </div>
           );
         }
+        if (entry.type === "httpResponse") {
+          return (
+            <div key={index} className={`event-row ${entry.error ? "bad" : "good"}`}>
+              <div className="tick">↦</div>
+              <div>
+                <div className="name">
+                  {entry.method} {entry.path}
+                </div>
+                <div className="detail">{entry.error ? entry.error : `status ${entry.status}`}</div>
+              </div>
+            </div>
+          );
+        }
         // semantic 이벤트는 이 원본 로그가 아니라 옆의 SemanticEventLog 패널이 보여준다.
         return null;
       })}

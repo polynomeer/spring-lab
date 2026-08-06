@@ -1,15 +1,20 @@
 import { useMemo } from "react";
 
+import { reduceDispatcherFlow } from "../graph/dispatcherReducer";
 import { reduceAutoProxy, reduceBeanLifecycle } from "../graph/reducers";
 import { AUTO_PROXY_STATUS_META, BEAN_LIFECYCLE_STATUS_META } from "../graph/statusMeta";
 import type { StatusMeta } from "../graph/types";
 import type { SemanticEvent } from "../types";
+import { DispatcherPipeline } from "./DispatcherPipeline";
+import { RequestPresets } from "./RequestPresets";
 import { StatusGraph } from "./StatusGraph";
 import { TxSwimlane } from "./TxSwimlane";
 
 interface Props {
   scenarioKey: string;
   semanticEvents: SemanticEvent[];
+  connected?: boolean;
+  onSendRequest?: (method: string, path: string, body?: string) => void;
 }
 
 function Legend({ statusMeta }: { statusMeta: Record<string, StatusMeta> }) {
@@ -25,9 +30,10 @@ function Legend({ statusMeta }: { statusMeta: Record<string, StatusMeta> }) {
   );
 }
 
-export function ScenarioVisualization({ scenarioKey, semanticEvents }: Props) {
+export function ScenarioVisualization({ scenarioKey, semanticEvents, connected, onSendRequest }: Props) {
   const beanGraph = useMemo(() => reduceBeanLifecycle(semanticEvents), [semanticEvents]);
   const proxyGraph = useMemo(() => reduceAutoProxy(semanticEvents), [semanticEvents]);
+  const pipelineStages = useMemo(() => reduceDispatcherFlow(semanticEvents), [semanticEvents]);
 
   if (scenarioKey === "bean-lifecycle") {
     return (
@@ -65,9 +71,18 @@ export function ScenarioVisualization({ scenarioKey, semanticEvents }: Props) {
     );
   }
 
+  if (scenarioKey === "dispatcher-flow") {
+    return (
+      <div className="viz-frame">
+        <RequestPresets disabled={!connected} onSend={(method, path, body) => onSendRequest?.(method, path, body)} />
+        <DispatcherPipeline stages={pipelineStages} />
+      </div>
+    );
+  }
+
   return (
     <div className="viz-frame placeholder">
-      <p>이 시나리오는 아직 라이브로 실행할 수 없습니다(설계 문서 4단계 예정).</p>
+      <p>이 시나리오는 아직 라이브로 실행할 수 없습니다.</p>
     </div>
   );
 }

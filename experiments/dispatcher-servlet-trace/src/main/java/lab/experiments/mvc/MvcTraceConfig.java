@@ -7,6 +7,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.web.HttpRequestHandler;
+import org.springframework.web.servlet.ViewResolver;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -39,6 +40,17 @@ public class MvcTraceConfig implements WebMvcConfigurer {
         return (request, response) -> {
             response.setContentType("text/plain;charset=UTF-8");
             response.getWriter().write("from-simple-url-mapping");
+        };
+    }
+
+    // JSP 인프라 없이도 /greeting이 실제 HTTP로 렌더까지 끝나도록 하는 최소 ViewResolver -
+    // 뷰 이름과 모델을 그대로 평문으로 찍는다. MockMvc 테스트(view().name(), model())는 렌더
+    // 이전의 ModelAndViewContainer만 보므로 이 리졸버 유무와 무관하게 그대로 통과한다.
+    @Bean
+    public ViewResolver viewResolver() {
+        return (viewName, locale) -> (model, request, response) -> {
+            response.setContentType("text/plain;charset=UTF-8");
+            response.getWriter().write("view=" + viewName + " model=" + model);
         };
     }
 }

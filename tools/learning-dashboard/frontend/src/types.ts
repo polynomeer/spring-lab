@@ -39,6 +39,7 @@ export type ScenarioMessage =
   | { type: "semantic"; scenario: string; event: SemanticEvent }
   | { type: "stdout"; scenario: string; stream: string; line: string }
   | { type: "exited"; scenario: string; totalHits: number }
+  | { type: "httpResponse"; scenario: string; method: string; path: string; status?: number; error?: string }
   | { type: "error"; message: string };
 
 export interface ScenarioMeta {

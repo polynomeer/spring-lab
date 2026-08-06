@@ -12,6 +12,7 @@ hamcrest = "2.2"
 jsonPath = "2.9.0"
 hibernateValidator = "8.0.2.Final"
 jakartaEl = "4.0.2"
+tomcatEmbed = "10.1.57"
 
 [libraries]
 spring-context = { module = "org.springframework:spring-context", version.ref = "spring" }
@@ -33,6 +34,7 @@ hamcrest = { module = "org.hamcrest:hamcrest", version.ref = "hamcrest" }
 json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
 hibernate-validator = { module = "org.hibernate.validator:hibernate-validator", version.ref = "hibernateValidator" }
 jakarta-el = { module = "org.glassfish:jakarta.el", version.ref = "jakartaEl" }
+tomcat-embed-core = { module = "org.apache.tomcat.embed:tomcat-embed-core", version.ref = "tomcatEmbed" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine" }

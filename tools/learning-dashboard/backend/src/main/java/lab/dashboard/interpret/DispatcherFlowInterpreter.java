@@ -6,21 +6,16 @@ import java.util.List;
 
 /**
  * DispatcherServlet 요청 흐름(docs/plan/03-learning-dashboard-design.md 6.4절) 시나리오의
- * semantic 해석기다. 다른 세 해석기와 달리, 이 시나리오는 아직 라이브로 실행 가능한 Lab이
- * 없다(임베디드 서버 기동 + 요청 주입 인프라가 필요해 4단계로 미뤄 뒀다) - 그래서 이 클래스는
- * 실제 jdi-tracer 세션이 아니라, 이미 검증된 실제 Spring 소스 메서드 시그니처
- * ({@code DispatcherServlet#doDispatch}, {@code #getHandler},
- * {@code HandlerExecutionChain#applyPreHandle},
- * {@code ServletInvocableHandlerMethod#invokeAndHandle},
- * {@code HandlerExceptionResolverComposite#resolveException} - docs/15-dispatcher-servlet,
- * docs/16-controller-invocation, docs/22-mvc-exception-handling에서 이미 확인된 것들)을
- * 근거로 미리 작성됐고, 합성(synthetic) 히트로만 검증돼 있다.
+ * semantic 해석기다. 라이브 진입점은 {@code experiments:dispatcher-servlet-trace}의
+ * {@code DispatcherServletTraceLab}(임베디드 Tomcat + 실제 DispatcherServlet) - 이 클래스의
+ * 5개 이벤트 타입은 실제 jdi-tracer 세션으로 검증됐다(각 클래스/메서드 이름이 실제 히트와
+ * 정확히 일치함을 확인했다).
  *
  * <p>{@code invokeAndHandle}은 어떤 컨트롤러 메서드인지가 인스턴스({@code this})에 담겨
  * 있는데, JDI의 {@code visibleVariables()}는 {@code this}를 포함하지 않는다 - 그래서
- * {@code CONTROLLER_INVOKED}는 어떤 메서드가 호출됐는지까지는 담지 못한다. 라이브 Lab을
- * 실제로 만들 때(4단계) 이 한계를 어떻게 메울지(예: {@code StackFrame#thisObject()}를
- * 별도로 캡처하도록 HitSerializer를 확장하는 것) 다시 판단해야 한다.
+ * {@code CONTROLLER_INVOKED}는 어떤 메서드가 호출됐는지까지는 담지 못한다. 이건 지어내지
+ * 않고 그대로 남겨 둔 한계다({@code StackFrame#thisObject()}로 메울 수는 있지만, 다른
+ * 시나리오들도 이 한계를 안고 가는 것과 일관되게 지금은 손대지 않는다).
  */
 public final class DispatcherFlowInterpreter implements ScenarioInterpreter {
 

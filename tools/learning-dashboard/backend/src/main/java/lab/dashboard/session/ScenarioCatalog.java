@@ -2,6 +2,7 @@ package lab.dashboard.session;
 
 import lab.dashboard.interpret.AutoProxyInterpreter;
 import lab.dashboard.interpret.BeanLifecycleInterpreter;
+import lab.dashboard.interpret.DispatcherFlowInterpreter;
 import lab.dashboard.interpret.ScenarioInterpreter;
 import lab.dashboard.interpret.TransactionPropagationInterpreter;
 
@@ -17,9 +18,7 @@ import java.util.function.Supplier;
 
 /**
  * 시나리오 이름 → (Gradle 모듈 경로, 대상 main 클래스, 브레이크포인트 스펙 파일,
- * semantic 해석기) 조회 표. 아직 라이브 Lab이 없는 DispatcherServlet 흐름(4단계로 미룸,
- * docs/plan/03-learning-dashboard-design.md 6.4절)은 여기 등록하지 않는다 - 실행할 수
- * 없는 시나리오를 카탈로그에 올려 두는 것보다, 실제로 돌아가는 것만 올려 두는 편이 낫다.
+ * semantic 해석기) 조회 표.
  */
 @Component
 public class ScenarioCatalog {
@@ -51,6 +50,10 @@ public class ScenarioCatalog {
                 "lab.experiments.tx.TransactionPropagationLab",
                 "tools/jdi-tracer/specs/transaction-propagation-lab.txt",
                 TransactionPropagationInterpreter::new);
+        register(repoRoot, "dispatcher-flow", ":experiments:dispatcher-servlet-trace",
+                "lab.experiments.mvc.DispatcherServletTraceLab",
+                "tools/jdi-tracer/specs/dispatcher-servlet-trace.txt",
+                DispatcherFlowInterpreter::new);
     }
 
     private void register(Path repoRoot, String name, String gradleModulePath, String mainClass,

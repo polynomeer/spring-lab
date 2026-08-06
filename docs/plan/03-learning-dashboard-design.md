@@ -2,7 +2,7 @@
 
 `tools/jdi-tracer`가 20주 넘게 쌓아 온 "실제 Spring 소스에 브레이크포인트를 걸고 스택/지역 변수를 관찰한다"는 방식을, 터미널 텍스트가 아니라 브라우저에서 실시간으로 움직이는 그래프/다이어그램으로 보여주는 웹 대시보드의 설계다. 이 저장소에서 이미 검증한 사실(빈 생명주기 순서, 3단계 캐시, AOP 자동 프록시 생성 경로, 트랜잭션 전파, DispatcherServlet 흐름)을 "읽어서 아는 것"에서 "눈으로 보고 손으로 조작하며 체득하는 것"으로 한 단계 끌어올리는 게 목적이다.
 
-**구현 현황**: 8번 절의 0~5단계(MVP 3개 시나리오 + 문서 연동)까지 구현 완료 — [`tools/learning-dashboard`](../../tools/learning-dashboard). DispatcherServlet 흐름(6.4절)은 이 문서가 애초에 예정한 대로 라이브 Lab 없이 보류돼 있다(대시보드에는 "SOON" 배지로 표시).
+**구현 현황**: 8번 절의 0~5단계 전부 구현 완료 — [`tools/learning-dashboard`](../../tools/learning-dashboard). 4개 시나리오(6.1~6.4) 모두 라이브로 실행된다 - DispatcherServlet 흐름(6.4절)도 임베디드 Tomcat 진입점(`experiments/dispatcher-servlet-trace`의 `DispatcherServletTraceLab`)이 추가되며 마지막으로 붙었다.
 
 ## 0. 결정된 전제
 
@@ -139,9 +139,11 @@ tools/
 
 ### 6.4 DispatcherServlet 요청 흐름
 
-- **대상**: [`experiments/dispatcher-servlet-trace`](../../experiments/dispatcher-servlet-trace)는 지금 `MockMvc` 기반 테스트만 있고 실제 서버를 띄우는 `main()`이 없다 — 4번 절에서 언급했듯 이 시나리오가 새 인프라(임베디드 Tomcat 기동 + 포트 준비 대기 + 백엔드발 실제 HTTP 요청)를 가장 많이 필요로 한다.
-- **의미 해석기가 만드는 고수준 이벤트**: `REQUEST_RECEIVED`, `HANDLER_MAPPING_CHECKED`(mappingClass, matched: bool), `HANDLER_SELECTED`(handlerMethod), `INTERCEPTOR_PRE_HANDLE`(interceptorClass, proceed: bool), `CONTROLLER_INVOKED`, `EXCEPTION_RESOLVED`(resolverClass) — 22주차 예외 처리 우선순위 시나리오까지 자연스럽게 확장 가능한 이벤트 모델이다.
-- **시각화**: 좌→우 파이프라인(Servlet → FrameworkServlet → DispatcherServlet → HandlerMapping → Interceptor → Controller → (예외 시) ExceptionResolver) — 프론트엔드의 "요청 보내기" 버튼을 누르면 각 단계가 순서대로 활성화되며, 매칭에 실패한 `HandlerMapping` 후보는 회색으로 남아 "왜 이 매핑이 선택됐는지"가 소거법으로 드러난다.
+**구현 완료.** 아래는 최초 설계이고, 실제로는 계획보다 단순하게 들어갔다 - 그 차이를 함께 적어 둔다.
+
+- **대상**: [`experiments/dispatcher-servlet-trace`](../../experiments/dispatcher-servlet-trace)에 `DispatcherServletTraceLab`(`main()`)을 추가해, `tomcat-embed-core`로 임베디드 Tomcat + 실제 `DispatcherServlet`을 띄운다. 랜덤 포트를 골라 `DISPATCHER_TRACE_READY port=<n>`을 표준 출력에 찍으면, 그 한 줄을 TracerServer가 stdout 이벤트로 중계하고 백엔드(`ScenarioSession`)가 정규식으로 읽어서 포트를 알아낸다 - 별도의 준비-완료 프로토콜을 새로 만들지 않았다. 프론트엔드의 "요청 보내기" 프리셋 버튼은 STOMP로 백엔드에 `(method, path, body)`를 보내고, 백엔드가 `java.net.http.HttpClient`로 그 포트에 실제 요청을 쏜다.
+- **의미 해석기가 만드는 고수준 이벤트**: 실제로 구현된 건 `REQUEST_RECEIVED`, `HANDLER_LOOKUP_STARTED`, `INTERCEPTOR_CHAIN_STARTED`, `CONTROLLER_INVOKED`, `EXCEPTION_RESOLUTION_STARTED`의 5개뿐이다 - 진입 브레이크포인트만으로 관찰 가능한 것만 남겼다(예: `HANDLER_MAPPING_CHECKED`의 `matched: bool`이나 `CONTROLLER_INVOKED`가 어떤 메서드인지는 `visibleVariables()`로 관찰되지 않아 지어내지 않았다 - `DispatcherFlowInterpreter`의 Javadoc 참고).
+- **시각화**: 좌→우 파이프라인 - 다만 Servlet/FrameworkServlet 단계는 뺐다(`doDispatch` 진입이 이미 DispatcherServlet 내부라 그 앞 두 단계를 구분할 브레이크포인트 증거가 없다). 대신 DispatcherServlet → HandlerMapping → Interceptor → Controller → (예외 시) ExceptionResolver 5단계만 그린다 - 관찰되지 않은 매핑 후보를 회색으로 대조해 보여주는 "소거법" 아이디어도 브레이크포인트가 `getHandler` 진입 한 곳뿐이라 구현하지 않았다.
 
 ## 7. 데이터 모델
 
@@ -191,7 +193,7 @@ tools/
   - Vite/React 스캐폴딩, WebSocket 클라이언트
   - 공용 재생 컨트롤 + 원본 로그 패널
 
-4단계: 시나리오별 시각화 (난이도 순: 6.1 → 6.2 → 6.3 → 6.4)
+4단계: 시나리오별 시각화 (난이도 순: 6.1 → 6.2 → 6.3 → 6.4) - 완료
   - 6.4(DispatcherServlet)는 임베디드 서버 기동/요청 주입 인프라가 추가로 필요해 가장 나중
 
 5단계: 문서 연동 + 마무리
