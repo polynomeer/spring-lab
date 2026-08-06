@@ -4,3 +4,10 @@ out/
 .idea/
 *.iml
 .DS_Store
+
+# tools/learning-dashboard/frontend (npm, outside the Gradle build)
+node_modules/
+dist/
+*.tsbuildinfo
+tools/learning-dashboard/frontend/vite.config.js
+tools/learning-dashboard/frontend/vite.config.d.ts

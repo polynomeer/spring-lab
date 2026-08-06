@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "learning-dashboard-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "tools/learning-dashboard/frontend", "run", "dev", "--", "--host"],
+      "port": 5173
+    },
+    {
+      "name": "learning-dashboard-backend",
+      "url": "http://localhost:8080",
+      "port": 8080
+    }
+  ]
+}
