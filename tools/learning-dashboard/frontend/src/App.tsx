@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { HitInspector } from "./components/HitInspector";
 import { RawEventLog } from "./components/RawEventLog";
 import { ScenarioTabs } from "./components/ScenarioTabs";
+import { ScenarioVisualization } from "./components/ScenarioVisualization";
 import { SemanticEventLog } from "./components/SemanticEventLog";
 import { TransportControls } from "./components/TransportControls";
 import { useDashboardSocket } from "./stomp/useDashboardSocket";
@@ -118,12 +119,7 @@ export default function App() {
           />
 
           <div className="viewport">
-            <div className="viz-frame placeholder">
-              <p>
-                이 시나리오의 그래프/시퀀스 시각화는 4단계에서 채워질 예정입니다. 지금은 오른쪽 패널의 원본 히트 로그와
-                semantic 이벤트로 실행을 따라갈 수 있습니다.
-              </p>
-            </div>
+            <ScenarioVisualization scenarioKey={activeScenario} semanticEvents={semanticEvents} />
           </div>
         </div>
 

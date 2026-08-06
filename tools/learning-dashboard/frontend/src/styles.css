@@ -333,6 +333,78 @@ select {
   line-height: 1.7;
 }
 
+/* ---------- graph / swimlane visualizations ---------- */
+
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  display: inline-block;
+  flex: none;
+}
+
+.graph-edge {
+  stroke: var(--line);
+  stroke-width: 1.6;
+  fill: none;
+}
+.graph-arrowhead {
+  fill: var(--line);
+}
+.graph-node-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  fill: var(--text);
+}
+.graph-node-status {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+
+.lane-box {
+  fill: var(--ink-800);
+  fill-opacity: 0.4;
+  stroke: var(--line-soft);
+}
+.lane-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  fill: var(--text-dim);
+}
+.lane-baseline {
+  stroke: var(--line-soft);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.lane-marker-hit {
+  font-family: var(--mono);
+  font-size: 9px;
+  fill: var(--text-faint);
+}
+.lane-marker-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+}
+
 /* ---------- rail ---------- */
 
 .rail {
@@ -412,6 +484,7 @@ select {
   color: var(--text-dim);
   font-size: 11px;
   margin-top: 2px;
+  word-break: break-all;
 }
 .event-row.good .name {
   color: var(--jade);
