@@ -1,3 +1,4 @@
+import { useAutoScroll } from "../hooks/useAutoScroll";
 import type { ScenarioMessage } from "../types";
 
 interface Props {
@@ -6,12 +7,14 @@ interface Props {
 }
 
 export function RawEventLog({ entries, onSelectHit }: Props) {
+  const logRef = useAutoScroll<HTMLDivElement>(entries.length);
+
   if (entries.length === 0) {
     return <div className="event-log"><div className="empty-hint">시나리오를 선택하고 재생하면 여기 히트가 쌓입니다.</div></div>;
   }
 
   return (
-    <div className="event-log">
+    <div className="event-log" ref={logRef}>
       {entries.map((entry, index) => {
         if (entry.type === "hit") {
           const loc = entry.event.location;
