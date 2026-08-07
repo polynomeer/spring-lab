@@ -35,6 +35,12 @@ const SCENARIOS: ScenarioMeta[] = [
     description: "임베디드 Tomcat에 실제 HTTP 요청을 쏴서, doDispatch → HandlerMapping → Interceptor → Controller(→ 예외 시 ExceptionResolver) 순서로 파이프라인이 채워지는 걸 지켜본다.",
     live: true,
   },
+  {
+    key: "event-multicast",
+    title: "애플리케이션 이벤트 멀티캐스트",
+    description: "동기 순서 리스너, condition 리스너, @Async 리스너(진짜 다른 스레드), 그리고 @TransactionalEventListener가 커밋 후에만 실행되는 것과 리스너 예외가 이후 리스너를 전부 막는 것까지.",
+    live: true,
+  },
 ];
 
 export default function App() {

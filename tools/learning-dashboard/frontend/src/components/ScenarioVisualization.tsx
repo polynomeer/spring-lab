@@ -1,14 +1,21 @@
 import { useMemo } from "react";
 
 import { reduceDispatcherFlow } from "../graph/dispatcherReducer";
+import { reduceEventMulticast } from "../graph/eventMulticastReducer";
 import { reduceAutoProxy, reduceBeanLifecycle } from "../graph/reducers";
-import { AUTO_PROXY_STATUS_META, BEAN_LIFECYCLE_STATUS_META } from "../graph/statusMeta";
+import {
+  AUTO_PROXY_STATUS_META,
+  BEAN_LIFECYCLE_STATUS_META,
+  EVENT_MULTICAST_MARKER_META,
+  TX_MARKER_META,
+} from "../graph/statusMeta";
+import { reduceTxPropagation } from "../graph/txReducer";
 import type { StatusMeta } from "../graph/types";
 import type { SemanticEvent } from "../types";
 import { DispatcherPipeline } from "./DispatcherPipeline";
 import { RequestPresets } from "./RequestPresets";
 import { StatusGraph } from "./StatusGraph";
-import { TxSwimlane } from "./TxSwimlane";
+import { Swimlane } from "./Swimlane";
 
 interface Props {
   scenarioKey: string;
@@ -34,6 +41,8 @@ export function ScenarioVisualization({ scenarioKey, semanticEvents, connected, 
   const beanGraph = useMemo(() => reduceBeanLifecycle(semanticEvents), [semanticEvents]);
   const proxyGraph = useMemo(() => reduceAutoProxy(semanticEvents), [semanticEvents]);
   const pipelineStages = useMemo(() => reduceDispatcherFlow(semanticEvents), [semanticEvents]);
+  const txLanes = useMemo(() => reduceTxPropagation(semanticEvents), [semanticEvents]);
+  const eventLanes = useMemo(() => reduceEventMulticast(semanticEvents), [semanticEvents]);
 
   if (scenarioKey === "bean-lifecycle") {
     return (
@@ -66,7 +75,11 @@ export function ScenarioVisualization({ scenarioKey, semanticEvents, connected, 
   if (scenarioKey === "tx-propagation") {
     return (
       <div className="viz-frame">
-        <TxSwimlane events={semanticEvents} />
+        <Swimlane
+          lanes={txLanes}
+          markerMeta={TX_MARKER_META}
+          emptyHint="재생하면 @Transactional 메서드 경계마다 레인이 여기 나타납니다."
+        />
       </div>
     );
   }
@@ -76,6 +89,18 @@ export function ScenarioVisualization({ scenarioKey, semanticEvents, connected, 
       <div className="viz-frame">
         <RequestPresets disabled={!connected} onSend={(method, path, body) => onSendRequest?.(method, path, body)} />
         <DispatcherPipeline stages={pipelineStages} />
+      </div>
+    );
+  }
+
+  if (scenarioKey === "event-multicast") {
+    return (
+      <div className="viz-frame">
+        <Swimlane
+          lanes={eventLanes}
+          markerMeta={EVENT_MULTICAST_MARKER_META}
+          emptyHint="재생하면 publishEvent/multicastEvent/리스너 호출이 여기 레인으로 나타납니다."
+        />
       </div>
     );
   }

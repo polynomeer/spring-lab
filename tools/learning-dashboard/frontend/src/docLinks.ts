@@ -84,4 +84,37 @@ export const DOC_LINKS: Record<string, DocLink> = {
     excerpt:
       "바깥의 commit() 호출이 내부적으로 processCommit이 아니라 processRollback으로 새는 지점이 UnexpectedRollbackException의 진짜 발생 위치다 — 예외를 잡았으니 안전하다는 직관이 트랜잭션 경계에서는 성립하지 않는다.",
   },
+  EVENT_PUBLISHED: {
+    path: "docs/21-application-events/application-events.md",
+    section: "6. 호출 흐름",
+    excerpt: "publishEvent(event) → multicastEvent(event, type) → getApplicationListeners(event, type) - 등록된 리스너 중 타입이 맞는 것만, order로 정렬 → 리스너마다 invokeListener() - 발행자 스레드에서 순서대로, 즉시.",
+  },
+  MULTICAST_STARTED: {
+    path: "docs/21-application-events/application-events.md",
+    section: "3. 예상 동작 (소스를 보기 전에 작성)",
+    excerpt: "리스너 하나가 예외를 던지면 그 리스너만 실패하고 나머지는 계속 실행될 거라 예상했다 - 틀렸다. 기본 errorHandler가 없으면 예외가 그대로 던져지고, multicastEvent()의 반복문 자체가 그 자리에서 멈춘다 - 이후 순서의 리스너는 아예 호출되지 않는다.",
+  },
+  LISTENER_INVOKED: {
+    path: "docs/21-application-events/application-events.md",
+    section: "3. 예상 동작 (소스를 보기 전에 작성)",
+    excerpt: "리스너 하나가 예외를 던지면 그 리스너만 실패하고 나머지는 계속 실행될 거라 예상했다 - 틀렸다. 기본 errorHandler가 없으면 예외가 그대로 던져지고, multicastEvent()의 반복문 자체가 그 자리에서 멈춘다 - 이후 순서의 리스너는 아예 호출되지 않는다.",
+  },
+  ASYNC_LISTENER_EXECUTING: {
+    path: "docs/21-application-events/application-events.md",
+    section: "6. 호출 흐름",
+    excerpt:
+      "분기 자체가 invokeListener() 바깥이라, invokeListener()에 브레이크포인트를 걸면 동기든 비동기든 항상 발행자 스레드에서 호출된 것으로 보인다 - 실제 스레드 전환은 그 프록시(AsyncExecutionInterceptor)를 통과하는 더 안쪽, listener.onApplicationEvent()가 실제 대상 메서드를 리플렉션으로 호출하는 지점에서 일어난다.",
+  },
+  TX_LISTENER_EVENT_RECEIVED: {
+    path: "docs/21-application-events/application-events.md",
+    section: "6. 호출 흐름",
+    excerpt:
+      "publishEvent(event) → 즉시 실행되지 않는다 → TransactionSynchronizationManager.isSynchronizationActive() 확인 - false(트랜잭션 없음) && !fallbackExecution → 이벤트 버려짐 / true → registerSynchronization(afterCommit 콜백)만 등록, 리턴.",
+  },
+  TX_LISTENER_INVOKED: {
+    path: "docs/21-application-events/application-events.md",
+    section: "7. 브레이크포인트",
+    excerpt:
+      "TransactionalApplicationListenerMethodAdapter에는 processEventWithCallback이라는 메서드가 없다 - 실제 지연 실행은 커밋/롤백 시점에 AbstractPlatformTransactionManager가 호출하는 TransactionalApplicationListenerSynchronization$PlatformSynchronization#afterCompletion → processEventWithCallbacks(복수형)에서 일어난다.",
+  },
 };

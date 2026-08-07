@@ -81,8 +81,15 @@ publishEvent(event)
   → 리스너마다 invokeListener() - 발행자 스레드에서 순서대로, 즉시
 
 [@Async @EventListener]
-invokeListener() → listener.supportsAsyncExecution() && executor != null
-  → executor.execute(() -> invokeListener(...)) - 발행자는 기다리지 않고 다음 리스너로 진행
+multicastEvent()의 for 루프 안에서, invokeListener()를 부르기 전에 분기한다
+  → executor != null && listener.supportsAsyncExecution()
+    - true → executor.execute(() -> invokeListener(...)) - 발행자는 기다리지 않고 다음 리스너로 진행
+    - false → invokeListener()를 그 자리에서 직접(동기) 호출
+  → 분기 자체가 invokeListener() 바깥이라, invokeListener()에 브레이크포인트를 걸면 동기든
+    비동기든 항상 발행자 스레드에서 호출된 것으로 보인다 - 실제 스레드 전환은 그 프록시
+    (AsyncExecutionInterceptor)를 통과하는 더 안쪽, listener.onApplicationEvent()가 실제
+    대상 메서드를 리플렉션으로 호출하는 지점에서 일어난다. jdi-tracer로 직접 확인하고 나서
+    고친 설명이다 - 처음엔 invokeListener() 자체가 스레드를 가를 거라 짐작했었다.
 
 [@TransactionalEventListener(AFTER_COMMIT)]
 publishEvent(event) → 즉시 실행되지 않는다
@@ -99,14 +106,23 @@ child.publishEvent(event)
 
 ## 7. 브레이크포인트
 
-이번 주제는 실제 소스 확인(2·9번)과 런타임 관찰(8번)로 검증했다.
+이번 주제는 실제 소스 확인(2·9번)과 런타임 관찰(8번)로 검증했다. 아래 5개는 이후 학습 대시보드의
+event-multicast 시나리오([`experiments/application-event-lab`](../../experiments/application-event-lab)의
+`ApplicationEventLab`)를 만들며 실제 jdi-tracer 세션으로 다시 검증했고, 그 과정에서 마지막 줄의
+클래스/메서드 이름이 실제로는 달랐다는 걸 발견해 고쳤다 - `TransactionalApplicationListenerMethodAdapter`에는
+`processEventWithCallback`이라는 메서드가 없다. `onApplicationEvent`는 `TransactionSynchronizationManager`가
+활성 상태면 `TransactionalApplicationListenerSynchronization.register()`로 콜백 등록만 하고 리턴하고,
+실제 지연 실행은 커밋/롤백 시점에 `AbstractPlatformTransactionManager`가 호출하는
+`TransactionalApplicationListenerSynchronization$PlatformSynchronization#afterCompletion` →
+`processEventWithCallbacks`(복수형)에서 일어난다 - 소스만 읽고 작성했을 때는 잡아내지 못했던
+차이라, 실제 실행으로 검증하는 것의 가치를 다시 확인한 사례다.
 
 ```text
 org.springframework.context.event.SimpleApplicationEventMulticaster#multicastEvent
 org.springframework.context.event.SimpleApplicationEventMulticaster#invokeListener
 org.springframework.context.support.AbstractApplicationContext#publishEvent
 org.springframework.transaction.event.TransactionalApplicationListenerMethodAdapter#onApplicationEvent
-org.springframework.transaction.event.TransactionalApplicationListenerMethodAdapter#processEventWithCallback
+org.springframework.transaction.event.TransactionalApplicationListenerSynchronization#processEventWithCallbacks
 ```
 
 ## 8. 런타임 관찰

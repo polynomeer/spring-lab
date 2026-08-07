@@ -1,17 +1,5 @@
 import type { SemanticEvent } from "../types";
-
-export interface TxLaneEvent {
-  type: string;
-  hitId: number;
-  order: number;
-  unexpected?: string;
-}
-
-export interface TxLane {
-  id: string;
-  label: string;
-  events: TxLaneEvent[];
-}
+import type { Lane } from "./types";
 
 /**
  * lab.dashboard.interpret.TransactionPropagationInterpreter가 붙여 주는
@@ -19,8 +7,8 @@ export interface TxLane {
  * 경계)을 레인 키로 그대로 쓴다. `order`는 전체 semantic 이벤트 스트림 안에서의 위치라,
  * 서로 다른 레인의 이벤트도 같은 시간축 위에서 나란히 비교할 수 있다.
  */
-export function reduceTxPropagation(events: SemanticEvent[]): TxLane[] {
-  const lanes = new Map<string, TxLane>();
+export function reduceTxPropagation(events: SemanticEvent[]): Lane[] {
+  const lanes = new Map<string, Lane>();
 
   events.forEach((event, order) => {
     const id = event.attributes.joinpointIdentification;

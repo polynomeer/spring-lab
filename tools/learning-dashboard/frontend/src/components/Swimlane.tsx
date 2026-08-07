@@ -1,26 +1,23 @@
-import type { SemanticEvent } from "../types";
-import { reduceTxPropagation } from "../graph/txReducer";
+import type { Lane, StatusMeta } from "../graph/types";
 
 interface Props {
-  events: SemanticEvent[];
+  lanes: Lane[];
+  markerMeta: Record<string, StatusMeta>;
+  emptyHint: string;
 }
-
-const MARKER_META: Record<string, { label: string; color: string }> = {
-  TX_STARTED: { label: "START", color: "var(--blue)" },
-  TX_SUSPENDED: { label: "SUSPEND", color: "var(--amber)" },
-  TX_RESUMED: { label: "RESUME", color: "var(--violet)" },
-  TX_COMMITTED: { label: "COMMIT", color: "var(--jade)" },
-  TX_ROLLED_BACK: { label: "ROLLBACK", color: "var(--rose)" },
-};
 
 const STEP = 96;
 const LANE_HEIGHT = 78;
 
-export function TxSwimlane({ events }: Props) {
-  const lanes = reduceTxPropagation(events);
-
+/**
+ * "공유 시간축 위의 여러 레인, 레인마다 마커" 모양을 쓰는 시각화가 둘이 되면서(tx-propagation,
+ * event-multicast) 일반화했다 - 레인 계산은 시나리오별 reducer(txReducer.ts,
+ * eventMulticastReducer.ts)가 맡고, 이 컴포넌트는 이미 계산된 {@link Lane}[]과 마커 색상/라벨
+ * 맵만 받는다(StatusGraph가 statusMeta를 prop으로 받는 것과 같은 패턴).
+ */
+export function Swimlane({ lanes, markerMeta, emptyHint }: Props) {
   if (lanes.length === 0) {
-    return <div className="empty-hint">재생하면 @Transactional 메서드 경계마다 레인이 여기 나타납니다.</div>;
+    return <div className="empty-hint">{emptyHint}</div>;
   }
 
   const maxOrder = Math.max(...lanes.flatMap((lane) => lane.events.map((event) => event.order)));
@@ -39,7 +36,7 @@ export function TxSwimlane({ events }: Props) {
             </text>
             <line x1={16} y1={y + 16} x2={width - 16} y2={y + 16} className="lane-baseline" />
             {lane.events.map((event, index) => {
-              const meta = MARKER_META[event.type] ?? { label: event.type, color: "var(--text-faint)" };
+              const meta = markerMeta[event.type] ?? { label: event.type, color: "var(--text-faint)" };
               const x = 60 + event.order * STEP;
               const unexpected = event.unexpected === "true";
               return (

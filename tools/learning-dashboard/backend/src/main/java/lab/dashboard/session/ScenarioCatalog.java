@@ -3,6 +3,7 @@ package lab.dashboard.session;
 import lab.dashboard.interpret.AutoProxyInterpreter;
 import lab.dashboard.interpret.BeanLifecycleInterpreter;
 import lab.dashboard.interpret.DispatcherFlowInterpreter;
+import lab.dashboard.interpret.EventMulticastInterpreter;
 import lab.dashboard.interpret.ScenarioInterpreter;
 import lab.dashboard.interpret.TransactionPropagationInterpreter;
 
@@ -54,6 +55,10 @@ public class ScenarioCatalog {
                 "lab.experiments.mvc.DispatcherServletTraceLab",
                 "tools/jdi-tracer/specs/dispatcher-servlet-trace.txt",
                 DispatcherFlowInterpreter::new);
+        register(repoRoot, "event-multicast", ":experiments:application-event-lab",
+                "lab.experiments.event.ApplicationEventLab",
+                "tools/jdi-tracer/specs/application-event-lab.txt",
+                EventMulticastInterpreter::new);
     }
 
     private void register(Path repoRoot, String name, String gradleModulePath, String mainClass,
