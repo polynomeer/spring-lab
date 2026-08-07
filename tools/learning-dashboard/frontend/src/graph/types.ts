@@ -27,6 +27,13 @@ export interface Lane {
   events: LaneEvent[];
 }
 
+export interface PipelineStage {
+  id: string;
+  label: string;
+  status: "pending" | "done" | "active";
+  hitId?: number;
+}
+
 export function shortName(fullyQualifiedName: string): string {
   const lastDot = fullyQualifiedName.lastIndexOf(".");
   return lastDot < 0 ? fullyQualifiedName : fullyQualifiedName.slice(lastDot + 1);

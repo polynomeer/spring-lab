@@ -41,6 +41,12 @@ const SCENARIOS: ScenarioMeta[] = [
     description: "동기 순서 리스너, condition 리스너, @Async 리스너(진짜 다른 스레드), 그리고 @TransactionalEventListener가 커밋 후에만 실행되는 것과 리스너 예외가 이후 리스너를 전부 막는 것까지.",
     live: true,
   },
+  {
+    key: "mvc-exception-priority",
+    title: "MVC 예외 처리 우선순위",
+    description: "컨트롤러 로컬 @ExceptionHandler가 @ControllerAdvice보다 항상 먼저 이기는 것, 두 advice가 겹치면 @Order가 정하는 것, 그리고 세 리졸버(ExceptionHandler → ResponseStatus → Default)가 어디서 멈추는지.",
+    live: true,
+  },
 ];
 
 export default function App() {

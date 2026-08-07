@@ -4,6 +4,7 @@ import lab.dashboard.interpret.AutoProxyInterpreter;
 import lab.dashboard.interpret.BeanLifecycleInterpreter;
 import lab.dashboard.interpret.DispatcherFlowInterpreter;
 import lab.dashboard.interpret.EventMulticastInterpreter;
+import lab.dashboard.interpret.ExceptionResolutionInterpreter;
 import lab.dashboard.interpret.ScenarioInterpreter;
 import lab.dashboard.interpret.TransactionPropagationInterpreter;
 
@@ -59,6 +60,10 @@ public class ScenarioCatalog {
                 "lab.experiments.event.ApplicationEventLab",
                 "tools/jdi-tracer/specs/application-event-lab.txt",
                 EventMulticastInterpreter::new);
+        register(repoRoot, "mvc-exception-priority", ":experiments:mvc-exception-pipeline",
+                "lab.experiments.mvcerror.ExceptionPipelineLab",
+                "tools/jdi-tracer/specs/mvc-exception-pipeline.txt",
+                ExceptionResolutionInterpreter::new);
     }
 
     private void register(Path repoRoot, String name, String gradleModulePath, String mainClass,

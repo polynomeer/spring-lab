@@ -13,8 +13,8 @@ class ScenarioCatalogTest {
     private final ScenarioCatalog catalog = new ScenarioCatalog(Path.of("."), new ClasspathResolver());
 
     @Test
-    void listsAllFiveScenariosIncludingTheNowLiveEventMulticast() {
-        assertThat(catalog.scenarioNames())
-                .containsExactly("bean-lifecycle", "aop-proxy", "tx-propagation", "dispatcher-flow", "event-multicast");
+    void listsAllSixScenariosIncludingTheNowLiveMvcExceptionPriority() {
+        assertThat(catalog.scenarioNames()).containsExactly(
+                "bean-lifecycle", "aop-proxy", "tx-propagation", "dispatcher-flow", "event-multicast", "mvc-exception-priority");
     }
 }

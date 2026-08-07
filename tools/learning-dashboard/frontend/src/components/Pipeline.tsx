@@ -1,7 +1,8 @@
-import type { PipelineStage } from "../graph/dispatcherReducer";
+import type { PipelineStage } from "../graph/types";
 
 interface Props {
   stages: PipelineStage[];
+  emptyHint: string;
 }
 
 const BOX_WIDTH = 148;
@@ -21,7 +22,13 @@ const STATUS_LABEL: Record<PipelineStage["status"], string> = {
   active: "여기서 정지됨",
 };
 
-export function DispatcherPipeline({ stages }: Props) {
+/**
+ * 좌→우 단계 파이프라인 - dispatcher-flow(6.4절)와 mvc-exception-priority(22주차)가
+ * 공유한다(StatusGraph가 statusMeta를 prop으로 받는 것과 같은 패턴). 단계 계산은
+ * dispatcherReducer/exceptionResolutionReducer가 맡고, 이 컴포넌트는 이미 계산된
+ * {@link PipelineStage}[]만 받는다.
+ */
+export function Pipeline({ stages, emptyHint }: Props) {
   const started = stages.some((stage) => stage.status !== "pending");
   const width = stages.length * BOX_WIDTH + (stages.length - 1) * GAP + MARGIN * 2;
   const height = BOX_HEIGHT + 64;
@@ -29,7 +36,7 @@ export function DispatcherPipeline({ stages }: Props) {
 
   return (
     <div>
-      {!started && <div className="empty-hint">위에서 요청을 보내면 여기 파이프라인이 단계별로 채워집니다.</div>}
+      {!started && <div className="empty-hint">{emptyHint}</div>}
       <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ maxWidth: "100%", height: "auto", display: "block" }}>
         <defs>
           <marker id="pipeline-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">

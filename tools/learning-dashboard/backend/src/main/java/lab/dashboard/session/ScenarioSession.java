@@ -36,10 +36,11 @@ import java.util.regex.Pattern;
 @Component
 public class ScenarioSession {
 
-    // dispatcher-flow(6.4절)처럼 "실행 중인 시나리오에 실제 HTTP 요청을 주입"하는 게 필요한
-    // 대상이 임베디드 서버를 띄우면, 준비된 포트를 이 한 줄로 알려준다(DispatcherServletTraceLab
-    // 참고) - 그 밖의 시나리오는 이 마커를 찍지 않으므로 매칭될 일이 없다.
-    private static final Pattern READY_PORT_PATTERN = Pattern.compile("^DISPATCHER_TRACE_READY port=(\\d+)$");
+    // dispatcher-flow(6.4절)나 mvc-exception-priority처럼 "실행 중인 시나리오에 실제 HTTP
+    // 요청을 주입"하는 게 필요한 대상이 임베디드 서버를 띄우면, 준비된 포트를 이 한 줄로
+    // 알려준다(DispatcherServletTraceLab, ExceptionPipelineLab 참고) - 그 밖의 시나리오는
+    // 이 마커를 찍지 않으므로 매칭될 일이 없다.
+    private static final Pattern READY_PORT_PATTERN = Pattern.compile("^EMBEDDED_SERVER_READY port=(\\d+)$");
     private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
 
     private final ObjectMapper mapper = new ObjectMapper();

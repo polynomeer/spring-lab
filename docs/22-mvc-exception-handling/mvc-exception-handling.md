@@ -90,7 +90,15 @@ public class HighPriorityAdvice {
 
 ## 7. 브레이크포인트
 
-이번 주제는 소스 확인(2·9번)과 `MockMvc` 기반 런타임 관찰(8번)로 검증했다.
+이번 주제는 소스 확인(2·9번)과 `MockMvc` 기반 런타임 관찰(8번)로 검증했다. 이후 학습 대시보드의
+mvc-exception-priority 시나리오([`experiments/mvc-exception-pipeline`](../../experiments/mvc-exception-pipeline)의
+`ExceptionPipelineLab`)를 만들며 실제 jdi-tracer 세션으로도 다시 확인했다 - 클래스/메서드 이름
+자체는 정확했지만, 그 과정에서 문서에 없던 동작을 하나 발견했다: `ResponseStatusExceptionResolver
+#doResolveException`은 예외 자신에게 `@ResponseStatus`가 없으면 `ex.getCause()`가 있는 한
+**자기 자신을 재귀 호출**한다(소스: `if (ex.getCause() instanceof Exception cause) { return
+doResolveException(request, response, handler, cause); }`) - 그래서 `MethodArgumentTypeMismatchException`처럼
+원인 체인이 있는 예외 하나에 이 브레이크포인트가 여러 번(예: 바깥 예외 한 번 + 원인 예외 한 번)
+걸린다. 각 히트의 `ex` 지역 변수 타입이 바뀌는 걸로 이 재귀를 그대로 관찰할 수 있다.
 
 ```text
 org.springframework.web.servlet.DispatcherServlet#processHandlerException

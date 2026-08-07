@@ -2,6 +2,9 @@ dependencies {
     implementation(libs.spring.webmvc)
     implementation(libs.jakarta.servlet.api)
     implementation(libs.jackson.databind)
+    // 대시보드 시나리오의 라이브 실행용 - dispatcher-servlet-trace와 동일하게, 실제 HTTP로
+    // DispatcherServlet을 태우기 위한 최소 서블릿 컨테이너.
+    implementation(libs.tomcat.embed.core)
     // Bean Validation(@Valid) 실패 실험을 위한 jakarta.validation 구현체.
     implementation(libs.hibernate.validator)
     // hibernate-validator의 기본 메시지 보간기(ResourceBundleMessageInterpolator)는 EL

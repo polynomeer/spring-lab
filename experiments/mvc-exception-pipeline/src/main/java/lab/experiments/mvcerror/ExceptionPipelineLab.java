@@ -1,4 +1,4 @@
-package lab.experiments.mvc;
+package lab.experiments.mvcerror;
 
 import java.net.ServerSocket;
 import java.nio.file.Files;
@@ -9,26 +9,24 @@ import org.springframework.web.context.support.AnnotationConfigWebApplicationCon
 import org.springframework.web.servlet.DispatcherServlet;
 
 /**
- * 대시보드 6.4절(DispatcherServlet 요청 흐름) 시나리오의 라이브 진입점 - 다른 세 Lab과 달리
- * 자기 완결적인 main()이 아니라, 임베디드 Tomcat을 띄우고 실제 HTTP 요청을 기다린다.
+ * 대시보드 mvc-exception-priority 시나리오의 라이브 진입점 - dispatcher-servlet-trace의
+ * {@code DispatcherServletTraceLab}과 동일한 패턴(임베디드 Tomcat + 실제 HTTP)이다.
  *
- * <p>{@code EMBEDDED_SERVER_READY port=<n>} 한 줄을 표준 출력으로 찍는데, 이건 TracerServer가
- * 그대로 stdout 이벤트로 중계하고, 대시보드 백엔드({@code ScenarioSession})가 그 줄을 파싱해서
- * "이제 이 포트로 요청을 보내도 된다"를 안다 - 이 프로세스와 백엔드 사이에 이것 말고 다른
- * 프로토콜은 없다(같은 마커를 쓰는 {@code ExceptionPipelineLab}도 마찬가지).
+ * <p>{@code EMBEDDED_SERVER_READY port=<n>}를 표준 출력으로 찍어 대시보드 백엔드
+ * ({@code ScenarioSession})가 포트를 알아내게 한다.
  */
-public final class DispatcherServletTraceLab {
+public final class ExceptionPipelineLab {
 
-    private DispatcherServletTraceLab() {
+    private ExceptionPipelineLab() {
     }
 
     public static void main(String[] args) throws Exception {
         int port = findFreePort();
 
         AnnotationConfigWebApplicationContext appContext = new AnnotationConfigWebApplicationContext();
-        appContext.register(MvcTraceConfig.class);
+        appContext.register(ExceptionPipelineConfig.class);
 
-        String baseDir = Files.createTempDirectory("dispatcher-servlet-trace").toString();
+        String baseDir = Files.createTempDirectory("mvc-exception-pipeline").toString();
         Tomcat tomcat = new Tomcat();
         tomcat.setPort(port);
         tomcat.setBaseDir(baseDir);

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import { reduceDispatcherFlow } from "../graph/dispatcherReducer";
 import { reduceEventMulticast } from "../graph/eventMulticastReducer";
+import { reduceExceptionResolution } from "../graph/exceptionResolutionReducer";
 import { reduceAutoProxy, reduceBeanLifecycle } from "../graph/reducers";
 import {
   AUTO_PROXY_STATUS_META,
@@ -11,8 +12,9 @@ import {
 } from "../graph/statusMeta";
 import { reduceTxPropagation } from "../graph/txReducer";
 import type { StatusMeta } from "../graph/types";
+import { DISPATCHER_FLOW_PRESETS, MVC_EXCEPTION_PRESETS } from "../requestPresets";
 import type { SemanticEvent } from "../types";
-import { DispatcherPipeline } from "./DispatcherPipeline";
+import { Pipeline } from "./Pipeline";
 import { RequestPresets } from "./RequestPresets";
 import { StatusGraph } from "./StatusGraph";
 import { Swimlane } from "./Swimlane";
@@ -41,6 +43,7 @@ export function ScenarioVisualization({ scenarioKey, semanticEvents, connected, 
   const beanGraph = useMemo(() => reduceBeanLifecycle(semanticEvents), [semanticEvents]);
   const proxyGraph = useMemo(() => reduceAutoProxy(semanticEvents), [semanticEvents]);
   const pipelineStages = useMemo(() => reduceDispatcherFlow(semanticEvents), [semanticEvents]);
+  const exceptionStages = useMemo(() => reduceExceptionResolution(semanticEvents), [semanticEvents]);
   const txLanes = useMemo(() => reduceTxPropagation(semanticEvents), [semanticEvents]);
   const eventLanes = useMemo(() => reduceEventMulticast(semanticEvents), [semanticEvents]);
 
@@ -87,8 +90,12 @@ export function ScenarioVisualization({ scenarioKey, semanticEvents, connected, 
   if (scenarioKey === "dispatcher-flow") {
     return (
       <div className="viz-frame">
-        <RequestPresets disabled={!connected} onSend={(method, path, body) => onSendRequest?.(method, path, body)} />
-        <DispatcherPipeline stages={pipelineStages} />
+        <RequestPresets
+          presets={DISPATCHER_FLOW_PRESETS}
+          disabled={!connected}
+          onSend={(method, path, body) => onSendRequest?.(method, path, body)}
+        />
+        <Pipeline stages={pipelineStages} emptyHint="위에서 요청을 보내면 여기 파이프라인이 단계별로 채워집니다." />
       </div>
     );
   }
@@ -101,6 +108,19 @@ export function ScenarioVisualization({ scenarioKey, semanticEvents, connected, 
           markerMeta={EVENT_MULTICAST_MARKER_META}
           emptyHint="재생하면 publishEvent/multicastEvent/리스너 호출이 여기 레인으로 나타납니다."
         />
+      </div>
+    );
+  }
+
+  if (scenarioKey === "mvc-exception-priority") {
+    return (
+      <div className="viz-frame">
+        <RequestPresets
+          presets={MVC_EXCEPTION_PRESETS}
+          disabled={!connected}
+          onSend={(method, path, body) => onSendRequest?.(method, path, body)}
+        />
+        <Pipeline stages={exceptionStages} emptyHint="위에서 요청을 보내면 어느 리졸버가 처리했는지 여기 파이프라인으로 나타납니다." />
       </div>
     );
   }

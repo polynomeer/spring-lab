@@ -2,7 +2,7 @@
 
 `tools/jdi-tracer`가 20주 넘게 쌓아 온 "실제 Spring 소스에 브레이크포인트를 걸고 스택/지역 변수를 관찰한다"는 방식을, 터미널 텍스트가 아니라 브라우저에서 실시간으로 움직이는 그래프/다이어그램으로 보여주는 웹 대시보드의 설계다. 이 저장소에서 이미 검증한 사실(빈 생명주기 순서, 3단계 캐시, AOP 자동 프록시 생성 경로, 트랜잭션 전파, DispatcherServlet 흐름)을 "읽어서 아는 것"에서 "눈으로 보고 손으로 조작하며 체득하는 것"으로 한 단계 끌어올리는 게 목적이다.
 
-**구현 현황**: 8번 절의 0~6단계 전부 구현 완료 — [`tools/learning-dashboard`](../../tools/learning-dashboard). 5개 시나리오(6.1~6.4 + event-multicast)가 모두 라이브로 실행된다 - 원래 "범위 밖" 후보였던 애플리케이션 이벤트 멀티캐스트가 6단계로 추가됐고, MVC 예외 처리 우선순위·Boot 조건 평가 리포트는 아직 향후 후보로 남아 있다.
+**구현 현황**: 8번 절의 0~7단계 전부 구현 완료 — [`tools/learning-dashboard`](../../tools/learning-dashboard). 6개 시나리오(6.1~6.4 + event-multicast + mvc-exception-priority)가 모두 라이브로 실행된다 - 원래 "범위 밖" 후보였던 애플리케이션 이벤트 멀티캐스트(6단계)와 MVC 예외 처리 우선순위(7단계)가 추가됐고, Boot 조건 평가 리포트만 아직 향후 후보로 남아 있다.
 
 ## 0. 결정된 전제
 
@@ -213,8 +213,22 @@ tools/
     받는 StatusGraph와 같은 패턴) 재사용했다 - 두 번째 실사용 사례가 나온 시점에 일반화한다는
     이 저장소의 원칙 그대로.
 
-(범위 밖, 향후 확장 후보로 남음): MVC 예외 처리 우선순위(22주차), Boot 자동 설정 조건 평가
-리포트를 인터랙티브 트리로 보여주는 시나리오.
+7단계(나머지 "범위 밖" 후보 중 하나를 마저 구현) - 완료
+  - mvc-exception-priority: docs/22-mvc-exception-handling.md 기반. dispatcher-flow와 같은
+    임베디드 Tomcat 패턴(ExceptionPipelineLab)을 그대로 재사용했다 - 준비-완료 마커도
+    DISPATCHER_TRACE_READY에서 시나리오 중립적인 EMBEDDED_SERVER_READY로 일반화해 두 Lab이
+    함께 쓴다. 문서의 브레이크포인트 5개는 이번엔 클래스/메서드 이름 자체는 정확했지만, 실제
+    jdi-tracer 세션에서 문서에 없던 동작을 하나 더 발견했다 - ResponseStatusExceptionResolver
+    #doResolveException이 예외에 @ResponseStatus가 없으면 원인(getCause())으로 재귀 호출된다는
+    것. 이번에도 문서를 함께 고쳤다.
+  - 시각화는 dispatcher-flow의 파이프라인을 일반화했다(DispatcherPipeline → Pipeline, 이미
+    props만으로 동작해서 컴포넌트 자체는 손댈 게 없었고 타입 위치만 옮겼다) - 리듀서 공통
+    알고리즘도 pipelineReducer.ts로 뽑아 dispatcherReducer/exceptionResolutionReducer가
+    공유한다. "요청 보내기" 프리셋 목록도 RequestPresets가 prop으로 받도록 일반화했다.
+
+(범위 밖, 향후 확장 후보로 남음): Boot 자동 설정 조건 평가 리포트를 인터랙티브 트리로 보여주는
+시나리오 - 이건 다른 시나리오들과 달리 JDI 스텝 실행이 아니라 "한 번 실행해서 리포트 하나를
+받는" 구조라 별도 설계가 필요하다.
 ```
 
 ## 9. 하지 않을 것 (Non-goals)

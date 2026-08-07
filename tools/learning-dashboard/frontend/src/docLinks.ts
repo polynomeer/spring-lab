@@ -117,4 +117,32 @@ export const DOC_LINKS: Record<string, DocLink> = {
     excerpt:
       "TransactionalApplicationListenerMethodAdapter에는 processEventWithCallback이라는 메서드가 없다 - 실제 지연 실행은 커밋/롤백 시점에 AbstractPlatformTransactionManager가 호출하는 TransactionalApplicationListenerSynchronization$PlatformSynchronization#afterCompletion → processEventWithCallbacks(복수형)에서 일어난다.",
   },
+  EXCEPTION_HANDLING_STARTED: {
+    path: "docs/22-mvc-exception-handling/mvc-exception-handling.md",
+    section: "6. 호출 흐름",
+    excerpt: "핸들러(또는 인자 리졸버·컨버터) 실행 중 예외 발생 → DispatcherServlet#processHandlerException → HandlerExceptionResolverComposite - 등록된 리졸버를 순서대로 시도.",
+  },
+  RESOLVER_CHAIN_ENTERED: {
+    path: "docs/22-mvc-exception-handling/mvc-exception-handling.md",
+    section: "5. 핵심 타입",
+    excerpt: "HandlerExceptionResolverComposite - 등록된 여러 리졸버를 순서대로 시도하는 컴포지트 - 하나가 ModelAndView(빈 것이라도)를 반환하면 그 자리에서 멈춘다.",
+  },
+  EXCEPTION_HANDLER_LOOKUP_STARTED: {
+    path: "docs/22-mvc-exception-handling/mvc-exception-handling.md",
+    section: "3. 예상 동작 (소스를 보기 전에 작성)",
+    excerpt:
+      "컨트롤러 자신의 @ExceptionHandler와 @ControllerAdvice가 같은 예외를 처리할 수 있으면, 등록 순서(스캔 순서)에 따라 우연히 결정될 거라 예상했다 - 틀렸다. ExceptionHandlerExceptionResolver는 컨트롤러 로컬 핸들러를 아예 별도의 캐시(exceptionHandlerCache)에서 먼저 조회하고, 매칭되면 advice 캐시는 쳐다보지도 않는다 - 구조적으로 고정된 순서다.",
+  },
+  RESPONSE_STATUS_RESOLUTION_STARTED: {
+    path: "docs/22-mvc-exception-handling/mvc-exception-handling.md",
+    section: "7. 브레이크포인트",
+    excerpt:
+      "ResponseStatusExceptionResolver#doResolveException은 예외 자신에게 @ResponseStatus가 없으면 ex.getCause()가 있는 한 자기 자신을 재귀 호출한다 - 원인 체인이 있는 예외 하나에 이 브레이크포인트가 여러 번 걸릴 수 있다는 뜻이다.",
+  },
+  DEFAULT_RESOLUTION_STARTED: {
+    path: "docs/22-mvc-exception-handling/mvc-exception-handling.md",
+    section: "6. 호출 흐름",
+    excerpt:
+      "[3] DefaultHandlerExceptionResolver(마지막 안전망) → MethodArgumentTypeMismatchException → 400 / HttpMessageNotReadableException → 400 / MethodArgumentNotValidException → 400 / NoHandlerFoundException → 404 / HttpRequestMethodNotSupportedException → 405.",
+  },
 };
