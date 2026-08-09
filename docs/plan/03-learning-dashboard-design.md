@@ -2,7 +2,7 @@
 
 `tools/jdi-tracer`가 20주 넘게 쌓아 온 "실제 Spring 소스에 브레이크포인트를 걸고 스택/지역 변수를 관찰한다"는 방식을, 터미널 텍스트가 아니라 브라우저에서 실시간으로 움직이는 그래프/다이어그램으로 보여주는 웹 대시보드의 설계다. 이 저장소에서 이미 검증한 사실(빈 생명주기 순서, 3단계 캐시, AOP 자동 프록시 생성 경로, 트랜잭션 전파, DispatcherServlet 흐름)을 "읽어서 아는 것"에서 "눈으로 보고 손으로 조작하며 체득하는 것"으로 한 단계 끌어올리는 게 목적이다.
 
-**구현 현황**: 8번 절의 0~7단계 전부 구현 완료 — [`tools/learning-dashboard`](../../tools/learning-dashboard). 6개 시나리오(6.1~6.4 + event-multicast + mvc-exception-priority)가 모두 라이브로 실행된다 - 원래 "범위 밖" 후보였던 애플리케이션 이벤트 멀티캐스트(6단계)와 MVC 예외 처리 우선순위(7단계)가 추가됐고, Boot 조건 평가 리포트만 아직 향후 후보로 남아 있다.
+**구현 현황**: 8번 절의 0~8단계 전부 구현 완료 — [`tools/learning-dashboard`](../../tools/learning-dashboard). 7개 시나리오(6.1~6.4 + event-multicast + mvc-exception-priority + condition-report)가 모두 라이브로 동작한다 - 설계 문서가 애초에 "범위 밖"으로 미뤄 뒀던 3개 후보(6번 절)까지 전부 구현됐다. condition-report(6.5절)만 다른 시나리오들과 근본적으로 다른 구조다 - JDI 스텝 실행이 아니라 "프로퍼티를 바꿔 다시 실행하고 리포트 트리를 보는" 1회성 구조라 `ScenarioSession`/`TracerServer` 파이프라인을 타지 않는다.
 
 ## 0. 결정된 전제
 
@@ -63,6 +63,9 @@ flowchart LR
 - **jdi-tracer-server**는 `tools/jdi-tracer`를 확장한 것이다 — 기존 `Tracer.java`의 launch/attach/브레이크포인트 로직은 그대로 두고, `printHit()` 대신 히트를 JSON으로 직렬화해 백엔드로 보내는 출력 어댑터와, "다음 히트까지 자동으로 resume하지 않고 명령을 기다리는" step 제어를 추가한다.
 - **대시보드 백엔드**는 (1) 어떤 시나리오를 어떤 Lab 클래스 + 스펙 파일로 실행할지 아는 세션 관리자, (2) 원본 히트를 시나리오별 의미 있는 이벤트로 변환하는 해석기, (3) 브라우저와의 WebSocket 연결을 담당한다.
 - **프론트엔드**는 시나리오를 고르고, 재생을 제어하고, 의미 이벤트를 애니메이션으로 그린다.
+- 이 다이어그램은 "스텝 실행형" 시나리오(6.1~6.4, event-multicast, mvc-exception-priority)에만
+  해당한다 - condition-report(6.5절)는 데이터 소스 자체에 "단계"가 없어서 이 파이프라인을 타지
+  않는다(`ScenarioSession`/`TracerServer`를 쓰지 않고 별도의 1회성 실행 경로를 쓴다 - 6.5절 참고).
 
 ## 3. 컴포넌트 설계
 
@@ -145,6 +148,76 @@ tools/
 - **의미 해석기가 만드는 고수준 이벤트**: 실제로 구현된 건 `REQUEST_RECEIVED`, `HANDLER_LOOKUP_STARTED`, `INTERCEPTOR_CHAIN_STARTED`, `CONTROLLER_INVOKED`, `EXCEPTION_RESOLUTION_STARTED`의 5개뿐이다 - 진입 브레이크포인트만으로 관찰 가능한 것만 남겼다(예: `HANDLER_MAPPING_CHECKED`의 `matched: bool`이나 `CONTROLLER_INVOKED`가 어떤 메서드인지는 `visibleVariables()`로 관찰되지 않아 지어내지 않았다 - `DispatcherFlowInterpreter`의 Javadoc 참고).
 - **시각화**: 좌→우 파이프라인 - 다만 Servlet/FrameworkServlet 단계는 뺐다(`doDispatch` 진입이 이미 DispatcherServlet 내부라 그 앞 두 단계를 구분할 브레이크포인트 증거가 없다). 대신 DispatcherServlet → HandlerMapping → Interceptor → Controller → (예외 시) ExceptionResolver 5단계만 그린다 - 관찰되지 않은 매핑 후보를 회색으로 대조해 보여주는 "소거법" 아이디어도 브레이크포인트가 `getHandler` 진입 한 곳뿐이라 구현하지 않았다.
 
+### 6.5 Boot 자동 설정 조건 평가 리포트
+
+**구현 완료.** 6.1~6.4/event-multicast/mvc-exception-priority와 다르게, 이 시나리오는
+`tools/jdi-tracer`(JDI 스텝 실행) 자체를 쓰지 않는다 - 왜 그런지, 그래서 무엇이 달라지는지부터
+적어 둔다.
+
+**왜 스텝 실행이 안 맞는가**: 지금까지 모든 시나리오의 데이터 소스는 "시간에 따라 순서대로
+발생하는 이벤트"였다(빈 생성 순서, advisor 평가 순서, 요청 파이프라인 단계, 리스너 호출 순서,
+리졸버 시도 순서) - 그래서 "한 걸음씩 밟아 나가며 관찰한다"는 은유가 맞았다. `ConditionEvaluationReport`는
+다르다 - `ApplicationContext.refresh()`가 끝나는 순간 이미 완성된 하나의 데이터 구조로 존재한다
+([`ConditionalAnnotationsTest`](../../experiments/auto-configuration-lab/src/test/java/lab/experiments/autoconfig/ConditionalAnnotationsTest.java)가
+이미 `ConditionEvaluationReport.get(beanFactory)`로 이렇게 조회하고 있다). 스텝을 밟을 "사이 상태"가
+없다 - refresh 전엔 텅 비어 있고, refresh 후엔 통째로 다 있다. 그래서 이 시나리오의 자연스러운
+상호작용은 "한 걸음씩 재생"이 아니라 "프로퍼티를 바꿔서 다시 실행하고, 그 결과 트리를 본다"이다.
+
+- **대상**: [`experiments/auto-configuration-lab`](../../experiments/auto-configuration-lab)를 코드
+  변경 없이 그대로 쓴다 - 이미 조건 4종을 대표하는 4개의 `@AutoConfiguration`이 갖춰져 있다
+  (`GreetingAutoConfiguration`: `@ConditionalOnProperty` + `matchIfMissing`, `LoggingSupportAutoConfiguration`:
+  무조건 등록, `JacksonSupportAutoConfiguration`: 문자열 기반 `@ConditionalOnClass`,
+  `SlowModeAutoConfiguration`: 커스텀 `SpringBootCondition`). 새로 추가할 건 `main()` 진입점
+  하나(`ConditionReportLab`)뿐이다.
+- **지켜야 할 제약 하나**: 이 모듈의 `build.gradle.kts`는 Jackson을 일부러 `testImplementation`으로만
+  넣어 뒀다 - `@ConditionalOnClass(name = "...ObjectMapper")`가 "런타임 클래스패스엔 없다"를
+  보여주기 위한 장치다. 리포트를 JSON으로 직렬화하겠다고 Jackson을 `implementation`으로 옮기면
+  이 조건이 항상 매치돼 버려서 그 실험 자체가 망가진다 - 그래서 `ConditionReportLab`은 Jackson 없이
+  직접 JSON 문자열을 만든다(리포트 구조가 고정돼 있어 손으로 짜기 어렵지 않다).
+- **백엔드는 `ScenarioSession`/`TracerServer`를 타지 않는다**: 스텝/재생 개념이 없으므로 억지로
+  그 추상화에 끼워 맞추지 않는다. 대신:
+  - `ConditionReportLab#main(String[] args)` - `args`를 `key=value` 프로퍼티 오버라이드로 해석해
+    `MapPropertySource`로 얹고, `PlainAppConfig`류 설정 + 4개 자동 설정을 등록한 컨텍스트를
+    `refresh()`한 뒤 `ConditionEvaluationReport.get(beanFactory)`를 조회해서, source(설정 클래스)별로
+    `{ unconditional: bool, fullMatch: bool, outcomes: [{ condition, matched, message }] }`를
+    한 줄 JSON으로 표준 출력에 찍고 종료한다. 다른 Lab들과 달리 오래 살아있지 않다 - 실행하고,
+    출력하고, 끝난다.
+  - 새 백엔드 컴포넌트 `ConditionReportRunner`(`ScenarioSession`과 별개) - `run(Map<String,String> overrides)`가
+    `ProcessBuilder`로 `ConditionReportLab`을 `key=value...` 인자와 함께 짧게 실행하고(JDI 없음,
+    `--add-modules jdk.jdi`도 필요 없음), 종료를 기다려 표준출력 한 줄을 읽고, 그 JSON 문자열을
+    그대로 `ConditionReportReceived` 이벤트로 발행한다. 다만 실제로는 `ConditionReportWebSocketController`가
+    그 문자열을 `ObjectMapper#readTree()`로 한 번 파싱해서 중첩 객체로 내보낸다 - 최초 설계는
+    "백엔드는 파싱조차 하지 않는다"였지만, 문자열 그대로 보내면 프론트엔드가 이중 인코딩된
+    JSON 문자열을 다시 `JSON.parse()`해야 해서 프로토콜이 지저분해졌다. 백엔드가 이미
+    `ScenarioSession`에서도 Jackson `ObjectMapper`를 쓰고 있어(TracerServer 프로토콜 파싱)
+    새 의존성은 아니다.
+  - 새 STOMP 경로 `/app/condition-report/run`(오버라이드 맵을 받음) → `/topic/condition-report`(기존
+    `/topic/scenario`와 분리 - `ScenarioMessage` 유니언에 이질적인 모양을 끼워 넣지 않는다).
+  - `ClasspathResolver`는 그대로 재사용(이미 범용적이다 - 모듈 경로 → 클래스패스 문자열).
+- **프론트엔드는 "재생"이 아니라 "다시 실행" UI다**: `ScenarioMeta`에 `interactionMode:
+  "stepped" | "snapshot"` 하나를 추가해서, `"snapshot"`인 이 시나리오에서는 `TransportControls`(Step/Play/Reset)와
+  HIT 카운터를 아예 숨긴다 - 스텝이 없는데 재생 버튼을 보여주는 건 거짓말이다. 대신 새 패널
+  하나(`ConditionReportPanel`)가 자기 몫의 작은 STOMP 구독을 갖고, "다시 실행" 프리셋 버튼들
+  (기본값 / greeting 끄기 / slow-mode 켜기 / 둘 다)을 누르면 그 오버라이드로 재실행을 요청한다.
+  결과는 인터랙티브 트리 - source별로 한 행(펼치면 조건별 매치 여부 + 이유 메시지), `isFullMatch()`로
+  녹/빨강, `LoggingSupportAutoConfiguration`처럼 조건이 아예 없는 것들은 "무조건 등록됨" 그룹으로
+  따로 묶는다. 기존 StatusGraph/Swimlane/Pipeline 중 어느 것도 억지로 재사용하지 않는다 - 트리
+  모양 자체가 그래프도, 시간축도, 파이프라인도 아니기 때문이다.
+- **설계 때 몰랐던 것 하나**: `@EnableAutoConfiguration`은 이 랩이 만든 4개만 줍는 게 아니라,
+  클래스패스에 있는 `spring-boot-autoconfigure` 전체(`AopAutoConfiguration`, `RabbitAutoConfiguration`
+  등 실제 Boot 자동 설정 100개 넘게)를 함께 평가해서 `ConditionEvaluationReport`에 전부 기록한다 -
+  직접 실행해서 처음 확인했다. 지어낸 데이터는 아니지만 이 대시보드의 목적(이 저장소가 만든
+  4가지 조건 예시를 보는 것)엔 순전히 잡음이라, `ConditionReportLab`이 source 이름이
+  `lab.experiments.autoconfig`로 시작하는 것만 걸러서 출력한다 - 데이터를 숨기는 게 아니라
+  범위를 좁히는 것이라고 판단했다.
+- **정직하게 못 보여주는 것**: `@AutoConfiguration(after = ...)`로 정한 순서는
+  `ConditionEvaluationReport`에 안 담긴다(소스별 맵일 뿐 순서 정보가 없다) - 트리에 순서를 지어내지
+  않는다(알파벳순이나 맵 순회 순서 그대로 둔다, 정렬 자체가 무의미하다는 걸 UI에 적어 둔다).
+  또한 이건 `DeferredImportSelector`의 실제 단계별 평가를 실시간으로 보여주는 게 아니라
+  `refresh()`가 끝난 뒤의 스냅샷이다 - 이건 이 대시보드만의 한계가 아니라 실제 Spring Boot의
+  `--debug`/`ConditionEvaluationReportLoggingListener`도 똑같이 사후 스냅샷이다.
+- **시나리오 키**: `condition-report`.
+
 ## 7. 데이터 모델
 
 ```json
@@ -226,9 +299,21 @@ tools/
     알고리즘도 pipelineReducer.ts로 뽑아 dispatcherReducer/exceptionResolutionReducer가
     공유한다. "요청 보내기" 프리셋 목록도 RequestPresets가 prop으로 받도록 일반화했다.
 
-(범위 밖, 향후 확장 후보로 남음): Boot 자동 설정 조건 평가 리포트를 인터랙티브 트리로 보여주는
-시나리오 - 이건 다른 시나리오들과 달리 JDI 스텝 실행이 아니라 "한 번 실행해서 리포트 하나를
-받는" 구조라 별도 설계가 필요하다.
+8단계(마지막 "범위 밖" 후보 - 6.5절) - 완료
+  - condition-report: docs/18-auto-configuration.md·19-conditional-configuration.md 기반.
+    다른 6개 시나리오와 근본적으로 다른 유일한 시나리오 - JDI 스텝 실행이 아니라 "프로퍼티를
+    바꿔 다시 실행하고 완성된 리포트 트리를 받는" 1회성 구조라, ScenarioSession/TracerServer를
+    아예 타지 않는다(새 컴포넌트 ConditionReportRunner, 새 STOMP 토픽 /topic/condition-report).
+    ConditionReportLab은 Jackson 없이 직접 JSON을 만든다 - 이 모듈이 Jackson을
+    testImplementation으로만 넣어 둔 게 바로 그 조건(@ConditionalOnClass) 실험의 핵심이라,
+    implementation으로 옮기면 그 실험이 망가진다.
+  - 실행해 보고서야 안 것: @EnableAutoConfiguration이 이 랩의 4개만이 아니라 클래스패스의
+    실제 Boot 자동 설정 100개 넘게를 전부 평가해서 리포트에 담는다 - source 이름을
+    lab.experiments.autoconfig로 필터링해서 범위를 좁혔다.
+  - 프론트엔드는 ScenarioMeta.interactionMode: "snapshot"으로 이 시나리오를 구분해서
+    TransportControls/HIT 카운터를 숨긴다 - 스텝이 없는데 재생 버튼을 보여주는 건 거짓말이라는
+    판단 그대로 구현됐다. 기존 StatusGraph/Swimlane/Pipeline 중 어느 것도 재사용하지
+    않았다(설계대로) - 트리는 그래프도 시간축도 파이프라인도 아니다.
 ```
 
 ## 9. 하지 않을 것 (Non-goals)

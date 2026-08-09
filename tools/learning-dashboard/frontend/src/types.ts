@@ -47,4 +47,32 @@ export interface ScenarioMeta {
   title: string;
   description: string;
   live: boolean;
+  // "stepped"(기본값 취급) - jdi-tracer로 한 걸음씩 재생하는 나머지 시나리오들.
+  // "snapshot" - condition-report처럼 재생 개념이 없는, "다시 실행해서 결과 하나를 받는" 시나리오.
+  interactionMode?: "stepped" | "snapshot";
+}
+
+// lab.dashboard.conditionreport.ConditionReportWebSocketController가 /topic/condition-report로
+// 보내는 봉투 모양 - ScenarioMessage 유니언과는 별개다(6.5절 설계 그대로, 데이터 모양이
+// 이질적이라 같은 토픽/유니언에 섞지 않는다).
+export interface ConditionOutcome {
+  condition: string;
+  matched: boolean;
+  message: string;
+}
+
+export interface ConditionSource {
+  fullMatch: boolean;
+  outcomes: ConditionOutcome[];
+}
+
+export interface ConditionReportData {
+  sources: Record<string, ConditionSource>;
+  unconditional: string[];
+}
+
+export interface ConditionReportMessage {
+  overrides: Record<string, string>;
+  report?: ConditionReportData;
+  error?: string;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 
+import { ConditionReportPanel } from "./components/ConditionReportPanel";
 import { HitInspector } from "./components/HitInspector";
 import { RawEventLog } from "./components/RawEventLog";
 import { ScenarioTabs } from "./components/ScenarioTabs";
@@ -47,6 +48,13 @@ const SCENARIOS: ScenarioMeta[] = [
     description: "컨트롤러 로컬 @ExceptionHandler가 @ControllerAdvice보다 항상 먼저 이기는 것, 두 advice가 겹치면 @Order가 정하는 것, 그리고 세 리졸버(ExceptionHandler → ResponseStatus → Default)가 어디서 멈추는지.",
     live: true,
   },
+  {
+    key: "condition-report",
+    title: "Boot 자동 설정 조건 평가 리포트",
+    description: "ConditionEvaluationReport는 refresh()가 끝나는 순간 이미 완성돼 있어 '단계'가 없다 - 그래서 재생 대신 프로퍼티를 바꿔 다시 실행하고, 어느 자동 설정이 왜 매치/불일치했는지 트리로 본다.",
+    live: true,
+    interactionMode: "snapshot",
+  },
 ];
 
 export default function App() {
@@ -78,7 +86,12 @@ export default function App() {
     setSemanticEvents([]);
     setSelectedHit(null);
     setRunning(false);
-    startScenario(key);
+    // snapshot 시나리오(condition-report)는 ScenarioCatalog에 등록돼 있지 않다 -
+    // ScenarioSession의 재생 모델을 타지 않으므로 start()를 부를 대상이 없다.
+    const meta = SCENARIOS.find((scenario) => scenario.key === key);
+    if (meta?.interactionMode !== "snapshot") {
+      startScenario(key);
+    }
   };
 
   const handleSelectHit = (hitId: number) => {
@@ -89,6 +102,7 @@ export default function App() {
   };
 
   const activeMeta = SCENARIOS.find((scenario) => scenario.key === activeScenario) ?? SCENARIOS[0];
+  const isSnapshot = activeMeta.interactionMode === "snapshot";
 
   return (
     <div className="app">
@@ -109,33 +123,43 @@ export default function App() {
               <h1>{activeMeta.title}</h1>
               <p>{activeMeta.description}</p>
             </div>
-            <div className="hitcounter">
-              HIT <b>{hitCount}</b>
-            </div>
+            {!isSnapshot && (
+              <div className="hitcounter">
+                HIT <b>{hitCount}</b>
+              </div>
+            )}
           </div>
 
-          <TransportControls
-            connected={connected && activeMeta.live}
-            running={running}
-            onStep={() => sendCommand("step")}
-            onPlay={(intervalMs) => {
-              setRunning(true);
-              sendCommand("play", intervalMs);
-            }}
-            onPause={() => {
-              setRunning(false);
-              sendCommand("pause");
-            }}
-            onReset={() => selectScenario(activeScenario)}
-          />
+          {!isSnapshot && (
+            <TransportControls
+              connected={connected && activeMeta.live}
+              running={running}
+              onStep={() => sendCommand("step")}
+              onPlay={(intervalMs) => {
+                setRunning(true);
+                sendCommand("play", intervalMs);
+              }}
+              onPause={() => {
+                setRunning(false);
+                sendCommand("pause");
+              }}
+              onReset={() => selectScenario(activeScenario)}
+            />
+          )}
 
           <div className="viewport">
-            <ScenarioVisualization
-              scenarioKey={activeScenario}
-              semanticEvents={semanticEvents}
-              connected={connected}
-              onSendRequest={sendHttpRequest}
-            />
+            {isSnapshot ? (
+              <div className="viz-frame">
+                <ConditionReportPanel />
+              </div>
+            ) : (
+              <ScenarioVisualization
+                scenarioKey={activeScenario}
+                semanticEvents={semanticEvents}
+                connected={connected}
+                onSendRequest={sendHttpRequest}
+              />
+            )}
           </div>
         </div>
 
