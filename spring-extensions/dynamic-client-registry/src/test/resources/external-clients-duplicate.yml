@@ -1,0 +1,7 @@
+external-clients:
+  - name: paymentClient
+    base-url: https://payment-v1.example.com
+    timeout: 1000
+  - name: paymentClient
+    base-url: https://payment-v2.example.com
+    timeout: 9000

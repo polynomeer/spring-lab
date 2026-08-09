@@ -1,6 +1,6 @@
 # BeanFactoryPostProcessor — BeanDefinition을 고치는 시점과 그 시점이 갈리는 이유
 
-[`docs/plan/01-roadmap.md`](../plan/01-roadmap.md) 5주차, [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md) 프로젝트 8(Configuration Property Rewriter)에 대응하는 분석 문서다. 카탈로그가 "5. BeanFactoryPostProcessor와 BeanPostProcessor"로 두 프로젝트를 묶어 두었으므로, 프로젝트 9(Method Timing BeanPostProcessor) 1단계 결과도 13번에 이어 붙였다.
+[`docs/plan/01-roadmap.md`](../plan/01-roadmap.md) 5주차, [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md) 프로젝트 8(Configuration Property Rewriter)에 대응하는 분석 문서다. 카탈로그가 "5. BeanFactoryPostProcessor와 BeanPostProcessor"로 두 프로젝트를 묶어 두었으므로, 프로젝트 9(Method Timing BeanPostProcessor) 1단계 결과도 13번에 이어 붙였다. 같은 인터페이스(`BeanDefinitionRegistryPostProcessor`)를 다루는 프로젝트 4(동적 빈 등록기)는 나중에 별도로 진행해 14번에 이어 붙였다.
 
 ## 1. 이번 질문
 
@@ -184,3 +184,59 @@ public Object postProcessAfterInitialization(@Nullable Object bean, String beanN
 ### 남겨둔 것
 
 카탈로그는 이 프로젝트를 4단계로 제시한다: JDK Dynamic Proxy(완료) → Spring `ProxyFactory` → `Pointcut`+`Advisor` → 자동 프록시 생성기(`AbstractAutoProxyCreator`)와 비교. 나머지 3단계는 11~12주차(Spring AOP)에서 `ProxyFactory`/`Pointcut`/`Advisor`/`AbstractAutoProxyCreator`를 제대로 다룰 때 이어간다 — 지금 서두르면 이번 주제(BeanFactoryPostProcessor vs BeanPostProcessor의 시점 차이)의 초점이 흐려진다.
+
+------
+
+## 14. 추가 실험: 설정 파일 기반 동적 빈 등록 (프로젝트 4, Dynamic Client Registry)
+
+`BeanDefinitionRegistryPostProcessor`가 "등록소 구조 자체를 바꿀 수 있다"는 걸 지금까지는 정적으로만(코드에 이름이 이미 다 나와 있는 빈을 등록/제거) 확인했다 — [`spring-extensions/dynamic-client-registry`](../../spring-extensions/dynamic-client-registry)는 컴파일 시점엔 몇 개가 등록될지, 이름이 뭔지조차 모르는 경우, 즉 설정 파일 내용에 따라 빈의 개수와 이름이 런타임에 결정되는 경우를 확인한다. Spring Boot의 자동 설정(18~19주차)이 바로 이 지점 위에 조건 평가를 얹은 것이라, 이 실험이 그 기초 구조에 해당한다.
+
+### 최소 재현 코드
+
+```yaml
+external-clients:
+  - name: paymentClient
+    base-url: https://payment.example.com
+    timeout: 3000
+  - name: orderClient
+    base-url: https://order.example.com
+    timeout: 5000
+```
+
+```java
+BeanDefinitionBuilder builder = BeanDefinitionBuilder.genericBeanDefinition(ExternalApiClient.class)
+        .addConstructorArgValue(name)
+        .addConstructorArgValue(baseUrl)
+        .addConstructorArgValue(timeoutMillis);
+BeanDefinition definition = builder.getBeanDefinition();
+definition.setRole(role);
+registry.registerBeanDefinition(name, definition);
+```
+
+전체 코드: [`ExternalClientRegistrar.java`](../../spring-extensions/dynamic-client-registry/src/main/java/lab/ext/clientregistry/ExternalClientRegistrar.java)
+
+### 실제로 확인한 것
+
+[`ExternalClientRegistryTest`](../../spring-extensions/dynamic-client-registry/src/test/java/lab/ext/clientregistry/ExternalClientRegistryTest.java) (8개):
+
+| 실험 | 결과 |
+| --- | --- |
+| YAML의 클라이언트 2개 등록 | `context.getBean("paymentClient", ...)`/`"orderClient"`로 이름 그대로 조회됨, 값도 정확 |
+| 동적으로 등록된 빈을 `List<ExternalApiClient>`로 생성자 주입 | 컴포넌트 스캔으로 찾은 평범한 빈과 완전히 동등하게 후보로 잡힘 — "특별 취급"이 전혀 없다 |
+| 기본 role | `BeanDefinition.ROLE_APPLICATION`(값은 0) |
+| `ROLE_INFRASTRUCTURE`로 등록 | role은 순전히 메타데이터일 뿐, 생성자 주입 후보 선택에는 전혀 관여하지 않는다 — 여전히 `List<ExternalApiClient>`에 잡힌다 |
+| 설정에 같은 `name`이 중복 | 예외 없이 **나중 항목이 이긴다**(`registerBeanDefinition`이 기본값(`allowBeanDefinitionOverriding=true`)에서는 조용히 덮어씀) |
+| `context.setAllowBeanDefinitionOverriding(false)` + 같은 상황 | `refresh()`가 `BeanDefinitionOverrideException`을 **그대로**(다른 예외로 감싸지 않고) 던짐 — 처음엔 `BeanCreationException` 등으로 감싸질 거라 예상했는데 아니었다 |
+| 설정 파일 자체가 없음 | 컨텍스트는 정상적으로 뜨고, 클라이언트 빈은 0개 — 예외 없음(의도적으로 그렇게 짰다) |
+| `external-clients: []`(빈 목록) | 위와 동일하게 0개, 정상 |
+
+**직접 겪은 것**: `printRuntimeClasspath`로 클래스패스만 뽑아서 `main()`을 바로 실행했더니 `NoSuchBeanDefinitionException`이 났다 — `compileJava`만 돌리고 `processResources`는 안 돌려서 `external-clients.yml`이 `build/resources/main`에 아직 없었던 것뿐이었다(`ClassPathResource.exists()`가 정직하게 `false`를 반환한 거라, 등록기 자체의 버그는 아니었다). 클래스패스만 조립하고 리소스 처리 태스크를 거치지 않으면 이런 함정이 있다는 걸 다시 확인했다.
+
+### Spring 설계 의도
+
+`ConfigurationClassPostProcessor`(2주차)가 `@ComponentScan`/`@Bean`을 처리하는 것도, `AutoConfigurationImportSelector`(18주차)가 `AutoConfiguration.imports`를 읽어 자동 설정 클래스를 끌어오는 것도 근본적으로 이 실험과 같은 지점(`BeanDefinitionRegistryPostProcessor`)에서 일어난다 — 차이는 "무엇을 근거로 등록하는가"(하드코딩된 설정 클래스 vs 외부 파일 vs 클래스패스 스캔 결과)와 "등록 여부를 어떻게 판단하는가"(무조건 vs `@ConditionalOnXxx`)뿐이다. `BeanDefinitionRegistry`는 이런 판단 로직을 전혀 모른다 — 그저 "이 이름으로 이 정의를 등록해 달라"는 요청을 받아들일 뿐이고, "무엇을, 왜" 등록할지는 전부 `BeanDefinitionRegistryPostProcessor` 구현체의 책임이다. 이 분리 덕분에 (a) YAML 목록 기반(이 실험), (b) 조건 평가 기반(18~19주차), (c) 순수 코드 기반(이 문서 4~13번) 이 전부 같은 확장 지점 하나로 표현될 수 있다.
+
+### 남겨둔 것
+
+- 실제 Boot의 `@ConfigurationProperties` 완화 바인딩(relaxed binding, `base-url` ↔ `baseUrl` 자동 매핑, 타입 변환 등)은 재구현하지 않았다 — YAML 키 이름을 코드에서 그대로 문자열로 참조했다. 이 실험의 초점은 바인딩 메커니즘이 아니라 `BeanDefinitionRegistryPostProcessor` 자체다.
+- 설정 항목별로 서로 다른 "타입"의 빈을 등록해야 하는 경우(예: 프로젝트 11 Plugin Auto Discovery)는 다루지 않았다 — 이건 "개수/이름"이 아니라 "타입"까지 동적으로 결정돼야 하는 다음 단계 문제다.

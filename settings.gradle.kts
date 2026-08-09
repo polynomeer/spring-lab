@@ -25,6 +25,7 @@ include(
     "mini-spring:mini-webmvc",
     "spring-extensions:api-response-handler",
     "spring-extensions:configuration-property-rewriter",
+    "spring-extensions:dynamic-client-registry",
     "spring-extensions:current-user-argument-resolver",
     "spring-extensions:method-timing-post-processor",
     "spring-extensions:mini-observability-starter:core",

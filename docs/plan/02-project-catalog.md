@@ -33,7 +33,7 @@ spring-internals-lab/
 | 1 | 수동 IoC 컨테이너 실험 | 완료 | [`experiments/ioc-container-lab`](../../experiments/ioc-container-lab) |
 | 2 | Mini BeanFactory | 완료 — 1~3단계 + 타입 기반 조회 + 순환 참조 탐지까지 확장 | [`mini-spring/mini-container`](../../mini-spring/mini-container) |
 | 3 | BeanDefinition Registry Inspector | 완료 | [`experiments/bean-definition-inspector`](../../experiments/bean-definition-inspector) |
-| 4 | 동적 빈 등록기 | 미착수 | — |
+| 4 | 동적 빈 등록기 | 완료 | [`spring-extensions/dynamic-client-registry`](../../spring-extensions/dynamic-client-registry) |
 | 5 | Context Refresh Visualizer | 완료 | [`experiments/context-refresh-visualizer`](../../experiments/context-refresh-visualizer) |
 | 6 | Bean Lifecycle Recorder | 완료 | [`experiments/bean-lifecycle-recorder`](../../experiments/bean-lifecycle-recorder) |
 | 7 | Mini Bean Lifecycle Pipeline | 완료 — 별도 모듈 대신 project 2의 `mini-container`를 확장 | [`mini-spring/mini-container`](../../mini-spring/mini-container) |
