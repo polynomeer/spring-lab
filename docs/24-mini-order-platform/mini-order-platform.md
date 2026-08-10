@@ -8,14 +8,14 @@
 
 ```text
 회원(Member)     - id, name, membership tier(BASIC/MEMBERSHIP)
-상품(Product)    - 아직 없음 (Phase 4, MVC 단계에서 등장 예정)
+상품(Product)    - 여전히 없음 (Phase 4에서도 결제/주문 도메인만으로 충분해 도입하지 않았다 - 아래 참고)
 주문(Order)      - id, memberId, amountWon, status(PENDING/PAID/CANCELLED) - Phase 3
 결제(Payment)    - PaymentGateway 전략(CARD/POINT), PaymentGatewayClient(외부 PG 흉내), payment_history(주문과 분리 저장) - Phase 1/3
 알림(Notification) - NotificationChannel(email/sms), 컬렉션 주입으로 브로드캐스트
 감사 로그        - AuditLog(인메모리, Phase 2) - Phase 5(이벤트)에서 영속화 여부 검토 예정
 ```
 
-도메인을 처음부터 다 만들지 않고 "이번 Phase가 요구하는 만큼만" 만든다 — 이 저장소 전체가 지켜온 "축소 구현" 원칙을 캡스톤 안에서도 그대로 따른 것이다. Product는 Phase 4(MVC)에서 "상품 조회 API"가 필요해질 때까지 등장할 이유가 없어서 아직 없다.
+도메인을 처음부터 다 만들지 않고 "이번 Phase가 요구하는 만큼만" 만든다 — 이 저장소 전체가 지켜온 "축소 구현" 원칙을 캡스톤 안에서도 그대로 따른 것이다. Phase 4(MVC)를 진행하면서 실제로 필요한 API가 "주문 생성/조회/취소"와 "환불"뿐이라는 게 확인돼서 Product는 여전히 도입하지 않았다 - 애초에 "MVC를 다루려면 상품 목록 API가 있어야 한다"는 가정 자체가 틀렸었다.
 
 ## 2. 모듈 구조
 
@@ -30,7 +30,9 @@ sample-app/mini-order-platform/
     aop/        - @Timed/@RequiresRole/@Audited/@Retryable/@IdempotencyGuarded 애노테이션 + 5개 @Aspect
     order/      - Order/OrderStatus/OrderRepository, PaymentHistory(REQUIRES_NEW), OrderOutbox,
                   OrderPlacementService, OrderValidator/OrderCancellationService(rollback-only), JdbcConfig
-    OrderPlatformConfig.java - @ComponentScan 진입점
+    web/        - @CurrentMember Resolver, PaymentMethodConverter, OrderResponseBodyAdvice,
+                  OrderExceptionHandlers, OrderController/PaymentController, OrderWebConfig(@EnableWebMvc)
+    OrderPlatformConfig.java - Phase 1~3용 진입점(web 패키지는 스캔에서 제외)
 ```
 
 ## 3. 학습 요소 → 구현 매핑
@@ -52,7 +54,10 @@ sample-app/mini-order-platform/
 | 트랜잭션 | 주문+Outbox 저장 | ✅ Phase 3 | `OrderPlacementService` |
 | 트랜잭션 | 결제 이력 분리(`REQUIRES_NEW`) | ✅ Phase 3 | `PaymentHistoryRecorder` |
 | 트랜잭션 | rollback-only 실험 | ✅ Phase 3 | `OrderCancellationService` |
-| MVC | 커스텀 인증 Resolver / 공통 응답 / 예외 처리 / 커스텀 Converter | ⬜ Phase 4 | - |
+| MVC | 커스텀 인증 사용자 Resolver | ✅ Phase 4 | `CurrentMemberArgumentResolver` |
+| MVC | 공통 응답 처리 | ✅ Phase 4 | `OrderResponseBodyAdvice`(+ project 26의 `ApiResponse<T>` 재사용) |
+| MVC | 예외 처리 | ✅ Phase 4 | `OrderExceptionHandlers` |
+| MVC | 커스텀 Converter | ✅ Phase 4 | `PaymentMethodConverter` |
 | 이벤트 | 주문 완료 이벤트 / 알림 발송 / Outbox 발행 / 커밋 후 처리 | ⬜ Phase 5 | - |
 | Boot | 결제 클라이언트 AutoConfiguration / 알림 Starter / 요청 관측 Starter | ⬜ Phase 6 | - |
 
@@ -173,9 +178,49 @@ Order/PaymentHistory/OrderOutboxEvent를 `JdbcTemplate` + 임베디드 H2로 영
 | `cancellingAPendingOrderSucceeds` | 정상 흐름 — 검증을 통과하면 취소가 실제로 반영됨(6.3의 대조군) |
 | `swallowingAnInnerRequiredValidationFailureStillMarksTheOuterTransactionRollbackOnly` | 경계 조건 — 내부 REQUIRED 예외를 삼켜도 트랜잭션은 이미 rollback-only, 결국 `UnexpectedRollbackException` |
 
-## 7. 남은 Phase (TODO)
+## 7. Phase 4 — MVC
 
-- **Phase 4 — MVC**: `@CurrentMember` 커스텀 ArgumentResolver, 공통 `ApiResponse<T>` 응답(`spring-extensions/api-response-handler` 재사용), `@ControllerAdvice`, 커스텀 `Converter`.
+`OrderPlatformConfig`(Phase 1~3, 순수 `AnnotationConfigApplicationContext`)와 `OrderWebConfig`(Phase 4, `@EnableWebMvc` + `AnnotationConfigWebApplicationContext`)를 별도 설정 클래스로 분리했다 - `OrderPlatformConfig`의 `@ComponentScan`에서 `web` 패키지를 명시적으로 제외해서, 웹이 필요 없는 기존 테스트는 전혀 건드리지 않고 MVC 계층을 얹었다(project 25/26이 이미 확립해 둔, MVC 설정을 좁게 스캔하는 전례를 그대로 따른 것).
+
+### 7.1 `@CurrentMember` — ArgumentResolver가 인증 컨텍스트를 옆으로 흘려보내는 지점
+
+`CurrentMemberArgumentResolver`는 `X-Member-Id`/`X-Member-Role` 헤더를 `CurrentActor.Actor`로 해석해서 컨트롤러 파라미터에 바인딩하는 동시에, 같은 값을 Phase 2의 `CurrentActor`(AuditAspect/AuthorizationAspect가 읽는 ThreadLocal)에도 심어 둔다 - 지금까지 테스트가 직접 `currentActor.set(...)`을 호출해 주던 걸, 이제는 실제 요청이 들어오면 이 리졸버가 대신 해 준다. 실제 Spring Security는 DispatcherServlet보다 앞선 Filter(SecurityContextPersistenceFilter류)가 이 일을 하지만, 여기서는 별도 필터 계층을 만들지 않고 ArgumentResolver 시점에 채운다 - 그 결과 "이 리졸버가 실행되기 전"(예: HandlerInterceptor#preHandle)에는 아직 CurrentActor가 비어 있다는 제약이 생긴다. `PaymentController.refund()`는 `actor` 파라미터 값 자체를 쓰지 않지만 그래도 `@CurrentMember`를 선언해 둬야 한다 - 그래야 이 리졸버가 실행돼서 Phase 2의 `@RequiresRole(ADMIN)` 검사가 볼 CurrentActor가 채워지기 때문이다.
+
+**ThreadLocal 유출 방지**: 서블릿 컨테이너는 요청마다 스레드를 새로 만들지 않고 스레드 풀을 재사용하므로, `CurrentActor`를 지우지 않으면 다음 요청이 (자신은 인증 헤더를 보내지 않았는데도) 이전 요청의 액터를 그대로 이어받을 수 있다. `CurrentActorClearingInterceptor#afterCompletion`이 매 요청 끝에 정리한다 - `currentActorDoesNotLeakFromOneRequestToTheNextOnTheSameThread` 테스트가 이 인터셉터를 빼면 실제로 깨지는지까지 확인했다.
+
+### 7.2 커스텀 `Converter` — 예상과 실제가 갈린 지점
+
+원래 계획은 `Converter<String, PaymentMethod>`를 등록해서, `BANK_TRANSFER`(Phase 1에서 일부러 어떤 게이트웨이도 구현하지 않은 값)를 서비스 계층까지 내려보내지 않고 웹 계층에서 400으로 거절하는 것이었다. `GenericConversionService`만 단독으로 테스트하면 이 계획대로 동작한다 - 더 구체적인 `(String, PaymentMethod)` 등록이 `StringToEnumConverterFactory`의 `(String, Enum)` 등록보다 우선한다.
+
+**직접 겪은 함정**: 그런데 실제 `@RequestParam` 바인딩 경로(MockMvc로 재현)에서는 이 Converter가 거절해도 요청이 그냥 통과했다 - `PaymentGatewayRegistry.charge()`까지 내려가서야 `IllegalArgumentException`으로 실패했다. 원인은 `TypeConverterDelegate#convertIfNecessary()`에 있다: `ConversionService`가 예외를 던지면 그 자리에서 바로 전파하지 않고 일단 붙잡아 두고, "대상 타입이 Enum이고 값이 String이면 `Enum#valueOf()`로 한 번 더 시도한다"는 오래된(ConversionService보다 먼저부터 있던) 하위 호환 fallback을 마지막에 실행한다 - 그 fallback이 `BANK_TRANSFER`를 조용히 성공시켜 버려서 우리 Converter의 거절이 통째로 무시된 것이다. 그래서 대상 타입을 `PaymentMethod`(enum)가 아니라 `PaymentMethodParam`(이 fallback이 적용될 수 없는, 순수 웹 계층 래퍼 타입)로 바꿨다 - **enum을 `@RequestParam`/`@PathVariable` 타입으로 직접 쓰면, 아무리 구체적인 Converter를 등록해도 그 Converter로 요청을 "거절"하는 건 근본적으로 불가능하다**는 게 이번에 확인한, 일반화되는 결론이다.
+
+### 7.3 공통 응답 처리 — 타입은 재사용하되 정책은 새로 짰다
+
+`project 26`(`spring-extensions/api-response-handler`)의 `ApiResponse<T>` 레코드를 의존성으로 추가해 그대로 재사용했다. 하지만 그 모듈의 `ApiResponseBodyAdvice`는 그대로 쓰지 않았다 - `ApiResponse.of()`가 `success`를 항상 `true`로 고정하기 때문에(그 모듈은 성공 응답만 다뤘다), 그 advice를 그대로 썼다면 `@ExceptionHandler`가 돌려주는 에러 응답도 `"success": true`로 나갔을 것이다. `OrderResponseBodyAdvice`는 본문이 `ErrorResponse`인지 여부로 `success`를 직접 계산한다 - "타입은 재사용하고 그 타입을 감싸는 정책은 이 모듈의 요구에 맞게 새로 짠다"는 선택.
+
+### 7.4 예외 처리 — 왜 project 25의 패턴을 그대로 따르지 않았는가
+
+`spring-extensions/current-user-argument-resolver`의 `MissingCurrentUserException`은 `ResponseStatusException`을 상속해서 Spring이 자동으로 상태 코드를 매핑하게 한다. 이 모듈에서는 그 패턴을 의도적으로 쓰지 않았다 - `ResponseStatusException` 경로(`ResponseStatusExceptionResolver`)는 `response.sendError()`로 끝나서 메시지 컨버터를 아예 거치지 않고, 그러면 `OrderResponseBodyAdvice`도 적용되지 않아 그 응답만 `ApiResponse` 봉투를 벗어난다. 그래서 `MissingCurrentMemberException`은 평범한 `RuntimeException`으로 두고 `OrderExceptionHandlers`가 다른 에러들과 같은 경로로 처리한다. `OrderExceptionHandlers` 하나가 Phase 2(`AccessDeniedException`)와 Phase 3(`PaymentFailedException`/`OrderNotCancellableException`/`UnexpectedRollbackException`)의 예외까지 전부 여기서 HTTP 상태를 얻는다 - 각 예외는 원래 자기 Phase의 목적만 신경 쓰면 됐고, "HTTP로 나갈 때 몇 번이어야 하는가"는 이 웹 계층의 관심사로 완전히 분리돼 있다.
+
+### 7.5 테스트
+
+[`OrderWebIntegrationTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/web/OrderWebIntegrationTest.java) (5개), [`PaymentMethodConverterTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/web/PaymentMethodConverterTest.java) (3개) — `AnnotationConfigWebApplicationContext` + `MockMvc` 기반:
+
+| 테스트 | 확인하는 것 |
+| --- | --- |
+| `placingAnOrderResolvesTheCurrentMemberAndWrapsTheSuccessResponse` | 정상 흐름 — 인증 헤더 → 주문 생성 → `ApiResponse` 봉투로 응답 |
+| `placingAnOrderWithoutAMemberHeaderIsRejectedBeforeReachingTheService` | 경계 조건 — 인증 없으면 401, 에러도 같은 봉투 |
+| `fetchingAMissingOrderReturnsAWrappedErrorResponse` | 경계 조건 — 존재하지 않는 주문 조회 시 404 |
+| `refundRequiresAdminRoleEvenThoughTheControllerLayerDoesNotCheckItItself` | Phase 2 AOP와의 통합 — 컨트롤러는 권한을 검사하지 않는데도 CUSTOMER는 403, ADMIN은 성공 |
+| `currentActorDoesNotLeakFromOneRequestToTheNextOnTheSameThread` | 경계 조건 — 인터셉터가 없으면 실패했을 ThreadLocal 유출 시나리오 |
+| `aSupportedMethodConvertsAndTheRequestSucceeds` | 정상 흐름 — CARD/POINT는 정상 변환 |
+| `anEnumConstantThatNoGatewaySupportsIsRejectedAtTheWebLayerWithAConsistentErrorEnvelope` | 경계 조건 — `BANK_TRANSFER`가 실제로 400으로 거절됨(7.2의 결론을 그대로 검증) |
+| `aCompletelyInvalidEnumValueAlsoGetsAConsistentErrorEnvelope` | 경계 조건 — enum에 아예 없는 값도 같은 봉투로 실패 |
+
+**직접 겪은 실수**: 처음 두 테스트 클래스를 작성할 때 `@AfterEach`에서 `context.close()`를 빼먹었다. `JdbcConfig`의 `EmbeddedDatabaseBuilder`는 이름을 지정하지 않으면 항상 같은 기본 이름("testdb")을 쓰는데, 컨텍스트를 닫지 않고 다음 테스트로 넘어가면 이전 테스트의 인메모리 DB가 여전히 살아 있는 채로 다음 컨텍스트가 같은 이름으로 `schema.sql`을 다시 실행하려다가 "테이블이 이미 있다"는 SQL 문법 오류로 깨졌다 - `OrderPlacementServiceTest`(Phase 3)는 처음부터 `@AfterEach`를 갖추고 있어서 이 문제를 겪지 않았던 것뿐이었다.
+
+## 8. 남은 Phase (TODO)
+
 - **Phase 5 — 이벤트**: 주문 완료 이벤트 → 알림 발송(4장에서 만든 `NotificationDispatcher` 재사용) + Outbox 발행을 `@TransactionalEventListener(AFTER_COMMIT)`으로 연결.
 - **Phase 6 — Boot**: 결제 클라이언트 AutoConfiguration, 알림 플러그인 Starter, 요청 관측 Starter(`spring-extensions/mini-observability-starter` 패턴 재사용).
 
