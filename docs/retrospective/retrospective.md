@@ -2,6 +2,8 @@
 
 [`docs/plan/01-roadmap.md`](../plan/01-roadmap.md)가 요구하는 최종 산출물이다. 1주차(IoC와 BeanFactory)부터 16주차(컨트롤러 메서드 호출과 응답 변환)까지 핵심 8단계(IoC 컨테이너 → 빈 생명주기 → 확장점 → 컴포넌트 스캔/DI → AOP → 트랜잭션 → Spring MVC)를 마친 뒤, 선택 과정인 17~20주차(Spring Boot 내부 - `SpringApplication`, 자동 설정, 조건부 설정, Starter 직접 구현)까지 이어서 완주했다. 이 문서는 그 20개 문서를 가로지르는 반복된 패턴과 직접 부딪힌 버그들을 정리하는 데 집중한다. 개별 주차의 세부 내용은 각 문서를 참고한다.
 
+**후기**: 아래 0~7번 절은 20주차를 완주한 시점 그대로 남겨 뒀다 — 그 뒤로 21~23주차(애플리케이션 이벤트, MVC 예외 처리 우선순위, 트랜잭셔널 아웃박스)를 추가로 진행하고, `tools/learning-dashboard`(jdi-tracer 기반 시각화 도구, 7개 시나리오)를 만들고, 카탈로그에 남아 있던 마지막 두 프로젝트(4번 동적 빈 등록기, 11번 Plugin Auto Discovery)까지 마치면서 [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md)의 32개 프로젝트가 전부 완료됐다. 그 경과는 [8번 절](#8-20주-이후--카탈로그-32개-프로젝트-완주와-학습-대시보드)에 정리했다 — 특히 7번 절("남겨 둔 질문")이 "여전히 미착수"라고 적어 둔 항목들은 지금은 전부 끝났다는 것만 미리 밝혀 둔다.
+
 ## 0. 숫자로 보는 20주
 
 - 주제 문서 20개(`docs/01-*` ~ `docs/20-*`), 그중 19개에 mermaid 다이어그램 포함(6주차는 새 실험 없이 4·5주차를 종합하는 회고 성격이라 다이어그램 없이 소스 분석만 남김)
@@ -167,6 +169,38 @@ mini-webmvc (15~16주차, project 27)
 **선택 4주에서**
 - 17주차에서 미룬 "웹 서버가 실제로 언제 뜨는가"는 자동 설정(18주차) 없이는 관찰할 수 없어서 미뤘는데, 20주차에서 실제 웹 자동 설정을 통합했지만 이 관찰 자체는 별도로 다시 다루지 않았다.
 - 20주차의 `mini-observability-starter`는 실제 Micrometer `ObservationRegistry` 연동 대신 인메모리 `ObservationLog`로 단순화했다 - 관찰 결과를 테스트에서 직접 조회하기 위한 의도적 선택이었지만, 실제 프로덕션 스타터라면 이 자리가 핵심이다.
-- 카탈로그의 project 23(Transactional Outbox), 28(Error Handling Pipeline), 29~30(Application Event Bus/Mini Event Multicaster)는 여전히 미착수다 - 이벤트 시스템과 예외 처리 파이프라인은 이번 20주 어디에서도 전용 주제로 다루지 않았다.
+- ~~카탈로그의 project 23(Transactional Outbox), 28(Error Handling Pipeline), 29~30(Application Event Bus/Mini Event Multicaster)는 여전히 미착수다~~ — 8번 절에 적었듯 넷 다 이후에 마쳤다. 이벤트 시스템과 예외 처리 파이프라인을 이번 20주 어디에서도 전용 주제로 다루지 않았다는 관찰 자체는 (그 시점 기준으로는) 정확했다.
 
-이것으로 로드맵의 20주 전체(핵심 16주 + 선택 4주)가 마무리된다. 남은 것은 위 목록의 개별 항목들을 골라 더 깊이 파는 것뿐이다.
+이것으로 로드맵의 20주 전체(핵심 16주 + 선택 4주)가 마무리된다. 남은 것은 위 목록의 개별 항목들을 골라 더 깊이 파는 것뿐이다 — 그중 상당수를 실제로 이어간 기록이 8번 절에 있다.
+
+## 8. 20주 이후 — 카탈로그 32개 프로젝트 완주와 학습 대시보드
+
+20주차를 마친 뒤에도 세 갈래로 계속 이어갔다: 로드맵 너머의 새 주제(21~23주차), 그 주제들을 브라우저에서 직접 조작하며 보는 시각화 도구(`tools/learning-dashboard`), 그리고 7번 절이 "여전히 미착수"로 남겨 뒀던 카탈로그의 마지막 항목들. 결과적으로 [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md)의 32개 프로젝트가 전부 완료됐다 — 그 표에 더 이상 "미착수" 행이 없다.
+
+### 8.1 숫자로 보는 지금
+
+- 주제 문서 23개(`docs/01-*` ~ `docs/23-*`), 그중 22개에 mermaid 다이어그램 포함(여전히 6주차만 다이어그램 없음 - 0번 절에서 밝힌 이유 그대로)
+- 코드 모듈 34개: `experiments/` 14개, `mini-spring/` 8개, `spring-extensions/` 8개(그중 3개는 `mini-observability-starter`), `sample-app/` 2개, `tools/` 2개(`jdi-tracer`, `learning-dashboard/backend`)
+- 자동화 테스트 283개, 전부 통과(`./gradlew build` 기준) — 20주차 시점의 217개에서 66개 늘었다
+- `docs/plan/02-project-catalog.md`의 32개 프로젝트 전부 완료
+
+### 8.2 21~23주차 — 로드맵 너머로 확장한 주제
+
+원래 20주 로드맵에는 없던 주제들이다. 순서대로 "동기 이벤트 멀티캐스트가 리스너 예외 하나로 전부 멈추는 것과 `@TransactionalEventListener`가 커밋 후에만 실행되는 것"([21주차](../21-application-events/application-events.md)), "컨트롤러 로컬 `@ExceptionHandler`가 `@ControllerAdvice`보다 항상 먼저 이기는 구조적 순서와 세 리졸버(`ExceptionHandler`→`ResponseStatus`→`Default`)의 우선순위"([22주차](../22-mvc-exception-handling/mvc-exception-handling.md)), "DB 트랜잭션이 보장하는 것(원자성)과 보장하지 않는 것(트랜잭션 밖 부수효과의 원자성) 사이의 간극을 아웃박스 패턴으로 메우는 법"([23주차](../23-transactional-outbox/transactional-outbox.md))을 확인했다.
+
+### 8.3 학습 대시보드 — jdi-tracer를 브라우저로
+
+[`tools/learning-dashboard`](../../tools/learning-dashboard)는 `tools/jdi-tracer`(1·3주차부터 써 온 JDI 드라이버)를 웹소켓으로 확장해서, 브레이크포인트 히트를 텍스트가 아니라 실시간 그래프/스윔레인/파이프라인으로 보여주는 React/Spring Boot 앱이다. 4주차(빈 생명주기), 12주차(자동 프록시), 14주차(트랜잭션 전파), 15~16주차(DispatcherServlet), 18~19주차(자동 설정/조건부 설정), 21~22주차(이벤트/예외 처리)를 가로지르는 7개 시나리오가 전부 실제로 동작한다 — 브라우저에서 Step/Play로 재생하거나(대부분의 시나리오), 실제 HTTP 요청을 주입하거나(15~16·22주차 시나리오), 프로퍼티를 바꿔 다시 실행하고 조건 평가 리포트 트리를 보는(18~19주차 시나리오) 세 가지 상호작용 방식으로 나뉜다.
+
+이 도구를 만드는 과정 자체가 3번 절의 교훈("이해했다고 생각했는데 실행해 보니 아니었다")을 **이미 다 써 둔 문서에 대해서도** 다시 확인시켜 줬다 — 21·22주차 문서는 원래 소스 읽기와 `MockMvc`/유닛 테스트만으로 검증됐고 `tools/jdi-tracer`로 직접 추적하지는 않았는데, 대시보드 시나리오를 만들며 처음으로 실제 jdi-tracer 세션을 붙여 보니 둘 다 문서에 없던 걸 찾아냈다: 21주차 문서가 적어 둔 `TransactionalApplicationListenerMethodAdapter#processEventWithCallback`이라는 메서드는 실제로 존재하지 않았고(실제 지연 실행 지점은 `TransactionalApplicationListenerSynchronization#processEventWithCallbacks`, 이름도 클래스도 다르다), 22주차 문서는 `ResponseStatusExceptionResolver#doResolveException`이 원인 예외로 재귀 호출된다는 걸 언급하지 않고 있었다. 두 문서 모두 그 자리에서 고쳤다 - "테스트를 통과했다"와 "실제 실행 경로를 다 봤다"가 다르다는 걸, 이미 완료 표시가 된 문서에서도 다시 겪은 셈이다.
+
+### 8.4 카탈로그의 마지막 두 프로젝트
+
+7번 절이 목록에 넣지 않았던, 진짜 마지막까지 남아 있던 두 개다.
+
+- **프로젝트 4(동적 빈 등록기)**: [`spring-extensions/dynamic-client-registry`](../../spring-extensions/dynamic-client-registry) - `BeanDefinitionRegistryPostProcessor`로 YAML 설정에 나열된 만큼 빈을 동적으로 등록한다. 5주차의 `ConfigRewriterLab`이 코드에 이미 있는 빈을 등록/제거하는 것과 달리, 이번엔 컴파일 시점엔 몇 개가 등록될지조차 모른다 - Spring Boot 자동 설정의 기초 구조에 정확히 대응한다. 이름이 중복되면 `registerBeanDefinition()`이 예외 없이 조용히 덮어쓰지만, `allowBeanDefinitionOverriding(false)`면 `BeanDefinitionOverrideException`이 다른 예외로 감싸이지 않고 그대로 전파된다는 것도 이번에 직접 확인했다.
+- **프로젝트 11(Plugin Auto Discovery)**: [`sample-app/plugin-discovery-system`](../../sample-app/plugin-discovery-system) - 컴포넌트 스캔으로 찾은 `NotificationPlugin` 구현체들을 전략 패턴처럼 타입 문자열로 조회한다. Spring이 자동으로 주입해 주는 `Map<String, T>`의 키가 우리가 정의한 `type()`이 아니라 **빈 이름**이라는 걸(처음엔 `type()`일 거라 예상했다) 직접 확인하고서야, 왜 별도의 레지스트리가 필요한지 몸으로 이해했다.
+
+### 8.5 마무리
+
+2번 절에서 뽑아낸 패턴들("확장점은 좁고 합성 가능하게 쪼갠다", "정교한 판단보다 예측 가능한 순서")은 21~23주차와 마지막 두 프로젝트에서도 형태만 바뀌어 그대로 반복됐다 - `BeanDefinitionRegistryPostProcessor` 하나가 코드 기반이든(5주차) 설정 기반이든(프로젝트 4) 조건 기반이든(18~19주차) 같은 확장점으로 수렴하는 것처럼. 그리고 3번 절의 결론("직접 실행해서 확인하기 전엔 안다고 확신할 수 없다")은 새 주제뿐 아니라 **이미 완료 표시를 해 둔 문서**에도 예외가 아니었다(8.3절) - 이 저장소의 방법론(`docs/plan/00-methodology.md`의 순환)이 "한 번 통과하면 끝"이 아니라, 다른 도구·다른 각도로 다시 검증할 때마다 값어치를 계속 낸다는 것을 32번째 프로젝트까지 와서 다시 확인한 셈이다.
