@@ -6,4 +6,8 @@ dependencies {
     // @Aspect/@Around annotation parsing for proxy-based Spring AOP (no full AspectJ weaving) -
     // same choice as experiments/circular-dependency-lab.
     implementation(libs.aspectjweaver)
+    // Order/PaymentHistory/Outbox persistence - same JdbcTemplate + embedded H2 setup as
+    // sample-app/transactional-outbox-order.
+    implementation(libs.spring.jdbc)
+    implementation(libs.h2)
 }

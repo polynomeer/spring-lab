@@ -8,14 +8,14 @@
 
 ```text
 회원(Member)     - id, name, membership tier(BASIC/MEMBERSHIP)
-상품(Product)    - 아직 Phase 1에는 없음 (Phase 3, MVC 단계에서 등장 예정)
-주문(Order)      - 아직 Phase 1에는 없음 (Phase 3, 트랜잭션 단계에서 등장 예정)
-결제(Payment)    - PaymentGateway 전략(CARD/POINT), PaymentGatewayClient(외부 PG 흉내)
+상품(Product)    - 아직 없음 (Phase 4, MVC 단계에서 등장 예정)
+주문(Order)      - id, memberId, amountWon, status(PENDING/PAID/CANCELLED) - Phase 3
+결제(Payment)    - PaymentGateway 전략(CARD/POINT), PaymentGatewayClient(외부 PG 흉내), payment_history(주문과 분리 저장) - Phase 1/3
 알림(Notification) - NotificationChannel(email/sms), 컬렉션 주입으로 브로드캐스트
-감사 로그        - 아직 없음 (AOP 단계에서 등장 예정)
+감사 로그        - AuditLog(인메모리, Phase 2) - Phase 5(이벤트)에서 영속화 여부 검토 예정
 ```
 
-도메인을 처음부터 다 만들지 않고 "이번 Phase가 요구하는 만큼만" 만든다 — 이 저장소 전체가 지켜온 "축소 구현" 원칙을 캡스톤 안에서도 그대로 따른 것이다. 예를 들어 Order/Product는 Phase 1(IoC/생명주기)에는 등장할 이유가 없어서 아직 없다.
+도메인을 처음부터 다 만들지 않고 "이번 Phase가 요구하는 만큼만" 만든다 — 이 저장소 전체가 지켜온 "축소 구현" 원칙을 캡스톤 안에서도 그대로 따른 것이다. Product는 Phase 4(MVC)에서 "상품 조회 API"가 필요해질 때까지 등장할 이유가 없어서 아직 없다.
 
 ## 2. 모듈 구조
 
@@ -28,6 +28,8 @@ sample-app/mini-order-platform/
     notification/ - NotificationChannel(email/sms), NotificationDispatcher, SentNotificationLog
     plugin/     - SelfDescribingPlugin 마커, PluginCatalog, PluginRegistrationBeanPostProcessor
     aop/        - @Timed/@RequiresRole/@Audited/@Retryable/@IdempotencyGuarded 애노테이션 + 5개 @Aspect
+    order/      - Order/OrderStatus/OrderRepository, PaymentHistory(REQUIRES_NEW), OrderOutbox,
+                  OrderPlacementService, OrderValidator/OrderCancellationService(rollback-only), JdbcConfig
     OrderPlatformConfig.java - @ComponentScan 진입점
 ```
 
@@ -47,7 +49,9 @@ sample-app/mini-order-platform/
 | AOP | 감사 로그 | ✅ Phase 2 | `AuditAspect` |
 | AOP | 재시도 | ✅ Phase 2 | `RetryAspect` |
 | AOP | 멱등성 검사 | ✅ Phase 2 | `IdempotencyAspect` |
-| 트랜잭션 | 주문+Outbox / 결제 이력 분리(`REQUIRES_NEW`) / rollback-only | ⬜ Phase 3 | - |
+| 트랜잭션 | 주문+Outbox 저장 | ✅ Phase 3 | `OrderPlacementService` |
+| 트랜잭션 | 결제 이력 분리(`REQUIRES_NEW`) | ✅ Phase 3 | `PaymentHistoryRecorder` |
+| 트랜잭션 | rollback-only 실험 | ✅ Phase 3 | `OrderCancellationService` |
 | MVC | 커스텀 인증 Resolver / 공통 응답 / 예외 처리 / 커스텀 Converter | ⬜ Phase 4 | - |
 | 이벤트 | 주문 완료 이벤트 / 알림 발송 / Outbox 발행 / 커밋 후 처리 | ⬜ Phase 5 | - |
 | Boot | 결제 클라이언트 AutoConfiguration / 알림 Starter / 요청 관측 Starter | ⬜ Phase 6 | - |
@@ -138,9 +142,39 @@ Phase 1(§4.3)에서 `PluginRegistrationBeanPostProcessor`가 `PluginCatalog`를
 
 [`PaymentProcessingServiceIntegrationTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/payment/PaymentProcessingServiceIntegrationTest.java) (4개, 실제 `AnnotationConfigApplicationContext` + `@EnableAspectJAutoProxy` 기반 — 여러 어드바이스가 실제로 겹쳤을 때의 동작만 다룸): §5.1에 기록한 4가지 시나리오.
 
-## 6. 남은 Phase (TODO)
+## 6. Phase 3 — 트랜잭션
 
-- **Phase 3 — 트랜잭션**: Order/Payment 도메인 도입, 주문+Outbox 저장(23주차 아웃박스 패턴 재사용), 결제 이력을 `REQUIRES_NEW`로 분리, rollback-only 실험.
+Order/PaymentHistory/OrderOutboxEvent를 `JdbcTemplate` + 임베디드 H2로 영속화하고(23주차 트랜잭셔널 아웃박스와 같은 스택), `OrderPlacementService.placeOrder()` 하나의 트랜잭션 경계 안에서 세 가지 상반된 요구를 동시에 만족시켰다: 주문+Outbox는 원자적으로 묶여야 하고, 결제 시도 이력은 그 주문 트랜잭션이 롤백돼도 살아남아야 하고, 실제 결제는 Phase 2의 AOP 스택(`PaymentProcessingService`)을 그대로 통과해야 한다.
+
+### 6.1 결제 이력을 `REQUIRES_NEW`로 분리해야 하는 이유
+
+`PaymentHistoryRecorder.attemptAndRecord()`는 `OrderPlacementService.placeOrder()`와 다른 트랜잭션(`REQUIRES_NEW`)에서 실행된다. `aFailedPaymentRollsBackTheOrderButThePaymentHistoryRecordSurvives` 테스트가 정확히 이걸 확인한다 - 결제가 거절되면(`PointPaymentGateway`가 `amountWon<=0`일 때 예외 없이 `success=false`를 반환하는 정상 실패 경로) `placeOrder()`는 `PaymentFailedException`을 던지며 롤백되어 `orders` 테이블에 그 주문이 아예 남지 않지만, 이미 독립적으로 커밋된 `payment_history` 행(`success=false`)은 그대로 남아 있다.
+
+**직접 확인한 함정**: 처음엔 `PaymentHistoryRecorder`를 `OrderPlacementService`의 private 메서드로 넣으려고 했다. 그랬다면 `this.attemptAndRecord(...)` 형태의 self-invocation이 되어 Spring의 프록시 기반 AOP를 완전히 건너뛰고, `@Transactional(REQUIRES_NEW)`가 전혀 적용되지 않았을 것이다(21주차 Transaction Propagation Playground에서 이미 알고 있던 함정이지만, 이번에 실제로 새 클래스로 분리하지 않고 진행했다가 재현해 볼 뻔했다) - 그래서 반드시 별도 빈으로 분리했다.
+
+### 6.2 주문+Outbox는 왜 자동으로 원자적인가
+
+`placeOrder()`가 성공 경로를 타면 `orderRepository.updateStatus(PAID)`와 `outboxRepository.save(...)`가 같은 메서드, 같은 트랜잭션(기본 `REQUIRED`) 안에서 실행된다 - 둘 다 같은 `JdbcTemplate`/같은 `DataSource` 커넥션을 쓰므로 23주차에서 이미 검증한 로컬 트랜잭션의 원자성을 그대로 물려받는다. 새로운 메커니즘이 아니라 "같은 트랜잭션 경계 안에 두 개의 쓰기를 넣었을 뿐"이라는 걸 `placingAnOrderWithSuccessfulPaymentCommitsOrderPaymentHistoryAndOutboxTogether` 테스트로 다시 한 번 확인했다.
+
+### 6.3 rollback-only 실험 — 예외를 삼켜도 소용없다
+
+`OrderCancellationService.cancelSwallowingValidationFailure()`는 `OrderValidator.assertCancellable()`이 던진 `OrderNotCancellableException`을 `catch`해서 정상적으로(`CancellationOutcome.VALIDATION_FAILED_BUT_SWALLOWED`) 반환하려 한다. 하지만 `assertCancellable()`이 `@Transactional`(기본 `REQUIRED`)로 **호출자의 트랜잭션에 참여**했기 때문에, 그 안에서 예외가 발생한 순간 `AbstractPlatformTransactionManager`가 현재 트랜잭션을 이미 rollback-only로 표시해 버린다 - 애플리케이션 코드가 그 예외를 잡아서 삼켰다는 사실은 트랜잭션 매니저 입장에서 아무 의미가 없다. 그래서 `cancelSwallowingValidationFailure()`가 정상적으로 `return`해도, 바깥의 `@Transactional` 어드바이스가 커밋을 시도하는 순간 `UnexpectedRollbackException`이 대신 던져진다 - 메서드가 반환하려던 값(`CancellationOutcome`)은 호출자에게 전혀 도달하지 못한다.
+
+`swallowingAnInnerRequiredValidationFailureStillMarksTheOuterTransactionRollbackOnly` 테스트가 이걸 그대로 재현한다. 대조군으로 `cancellingAPendingOrderSucceeds`(검증을 통과하는 정상 흐름)도 함께 뒀다 - "왜 이 실험이 놀라운가"는 실패 케이스만으로는 안 보이고, 정상 케이스와 나란히 놓아야 "검증 실패가 생기는 순간부터 다르게 동작한다"는 게 드러난다.
+
+### 6.4 테스트
+
+[`OrderPlacementServiceTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/order/OrderPlacementServiceTest.java) (4개, 실제 `AnnotationConfigApplicationContext` + 임베디드 H2 기반):
+
+| 테스트 | 확인하는 것 |
+| --- | --- |
+| `placingAnOrderWithSuccessfulPaymentCommitsOrderPaymentHistoryAndOutboxTogether` | 정상 흐름 — 주문 PAID + 결제 이력 + Outbox 이벤트가 모두 같은 트랜잭션으로 커밋됨 |
+| `aFailedPaymentRollsBackTheOrderButThePaymentHistoryRecordSurvives` | 경계 조건 — 결제 거절 시 주문/Outbox는 롤백되지만 `REQUIRES_NEW`로 분리된 결제 이력은 살아남음 |
+| `cancellingAPendingOrderSucceeds` | 정상 흐름 — 검증을 통과하면 취소가 실제로 반영됨(6.3의 대조군) |
+| `swallowingAnInnerRequiredValidationFailureStillMarksTheOuterTransactionRollbackOnly` | 경계 조건 — 내부 REQUIRED 예외를 삼켜도 트랜잭션은 이미 rollback-only, 결국 `UnexpectedRollbackException` |
+
+## 7. 남은 Phase (TODO)
+
 - **Phase 4 — MVC**: `@CurrentMember` 커스텀 ArgumentResolver, 공통 `ApiResponse<T>` 응답(`spring-extensions/api-response-handler` 재사용), `@ControllerAdvice`, 커스텀 `Converter`.
 - **Phase 5 — 이벤트**: 주문 완료 이벤트 → 알림 발송(4장에서 만든 `NotificationDispatcher` 재사용) + Outbox 발행을 `@TransactionalEventListener(AFTER_COMMIT)`으로 연결.
 - **Phase 6 — Boot**: 결제 클라이언트 AutoConfiguration, 알림 플러그인 Starter, 요청 관측 Starter(`spring-extensions/mini-observability-starter` 패턴 재사용).
