@@ -1,6 +1,6 @@
 # 컴포넌트 스캔 — 클래스패스를 뒤져서 BeanDefinition 후보를 찾아내는 방법
 
-[`docs/plan/01-roadmap.md`](../plan/01-roadmap.md) 7주차, [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md) 프로젝트 10(Mini Component Scanner)에 대응하는 분석 문서다.
+[`docs/plan/01-roadmap.md`](../plan/01-roadmap.md) 7주차, [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md) 프로젝트 10(Mini Component Scanner)에 대응하는 분석 문서다. 같은 주제(컴포넌트 스캔 + 컬렉션 주입)를 실전 응용으로 다루는 프로젝트 11(Plugin Auto Discovery)은 나중에 별도로 진행해 13번에 이어 붙였다.
 
 ## 1. 이번 질문
 
@@ -124,3 +124,59 @@ org.springframework.context.annotation.ClassPathScanningCandidateComponentProvid
 - 예상대로였던 것: exclude filter가 include filter보다 항상 우선한다는 가정 — 공식 테스트로 정확히 확인됐다.
 - 이번에 새로 구체화된 것: "Spring은 클래스를 로딩하지 않는다"는 것은 알고 있었지만, **정확히 어떤 방식(ASM 바이트코드 읽기)이고 왜 그렇게 해야 하는지**(연쇄적 클래스 로딩/링크의 부작용 회피)는 이번에 처음 정리했다. 우리 구현은 `initialize=false`로 절반만 흉내 냈다 — static 초기화는 피했지만 로딩·링크 자체는 여전히 발생한다.
 - 새로 열린 질문: 메타 애노테이션(스테레오타입) 지원과 ASM 기반 재구현은 지금 범위 밖으로 남겨 뒀다 — 실제로 구현해 보면 `Class.forName` 기반 스캐너와 성능·안전성 차이를 직접 측정해 볼 만하다.
+
+------
+
+## 13. 추가 실험: 컴포넌트 스캔으로 만드는 플러그인 시스템 (프로젝트 11, Plugin Auto Discovery)
+
+지금까지는 컴포넌트 스캔이 "빈을 찾아 등록한다"는 것 자체를 다뤘다 — [`sample-app/plugin-discovery-system`](../../sample-app/plugin-discovery-system)은 그 결과물을 실제로 어떻게 **활용**하는지, 즉 스캔으로 찾은 같은 인터페이스의 여러 구현체를 전략 패턴처럼 런타임에 골라 쓰는 실전 패턴을 확인한다. 카탈로그가 이 프로젝트를 "포트폴리오 구현"(실제 백엔드 프로젝트로 보여주기 좋은 대상) 등급으로 분류해 둔 이유이기도 하다.
+
+### 최소 재현 코드
+
+```java
+public interface NotificationPlugin {
+    String type();
+    void send(NotificationMessage message);
+    default boolean enabled() { return true; }
+}
+```
+
+`SlackNotificationPlugin`(`@Order(1)`, 우선순위는 가장 높지만 `enabled() = false` — webhook 미설정을 가정), `EmailNotificationPlugin`(`@Order(2)`), `SmsNotificationPlugin`(`@Order(3)`) 셋 다 `@Component`로 스캔된다. [`NotificationPluginRegistry`](../../sample-app/plugin-discovery-system/src/main/java/lab/sampleapp/plugindiscovery/NotificationPluginRegistry.java)가 생성자로 `List<NotificationPlugin>`을 통째로 받아서, `type()`을 키로 하는 자신만의 `Map`을 다시 만든다.
+
+```java
+public NotificationPluginRegistry(List<NotificationPlugin> plugins) {
+    this.orderedPlugins = List.copyOf(plugins);
+    Map<String, NotificationPlugin> map = new LinkedHashMap<>();
+    for (NotificationPlugin plugin : plugins) {
+        NotificationPlugin existing = map.putIfAbsent(plugin.type(), plugin);
+        if (existing != null) {
+            throw new IllegalStateException("duplicate NotificationPlugin type '" + plugin.type() + "': " + ...);
+        }
+    }
+    this.byType = Map.copyOf(map);
+}
+```
+
+### 실제로 확인한 것
+
+[`PluginDiscoveryTest`](../../sample-app/plugin-discovery-system/src/test/java/lab/sampleapp/plugindiscovery/PluginDiscoveryTest.java) (8개):
+
+| 실험 | 결과 |
+| --- | --- |
+| 패키지 스캔으로 플러그인 3개 발견 | `context.getBeansOfType(NotificationPlugin.class)`가 3개 |
+| Spring이 자동으로 주입해 주는 `Map<String, NotificationPlugin>`의 키 | **빈 이름**("emailNotificationPlugin" 등)이지, 우리가 정의한 `type()`("email")이 아니다 — 처음엔 `type()`이 키일 거라 예상했는데 틀렸다. 그래서 `NotificationPluginRegistry`가 따로 필요하다 |
+| `List<NotificationPlugin>` 생성자 주입 | `@Order` 값(1→slack, 2→email, 3→sms) 순서 그대로 도착 — enabled 여부와 무관하게 발견된 전부가, 정렬된 채로 |
+| `registry.firstEnabled()` | 우선순위 1위인 `slack`은 `enabled()=false`라 건너뛰고 `email`을 반환 — "발견됨"과 "지금 쓸 수 있음"이 다르다는 걸 실제로 보여준다 |
+| `type()`이 같은 두 플러그인으로 레지스트리 생성 | 생성자에서 즉시 `IllegalStateException` — 등록 자체가 아니라 **레지스트리를 조립하는 시점**에 걸린다(빈 등록은 이미 다 끝난 뒤이므로, `BeanDefinitionRegistry` 수준의 충돌은 아니다) |
+| `registry.dispatch("email", message)` | 해당 플러그인의 `send()`가 실제로 호출됨(`SentMessageLog`로 확인) |
+| `registry.dispatch("slack", message)`(비활성) | 조용히 무시하지 않고 `IllegalStateException`을 던진다 — 비활성 플러그인 호출을 침묵 실패로 두지 않겠다는 설계 선택 |
+| `registry.dispatch("fax", message)`(미등록 타입) | `IllegalArgumentException` |
+
+### Spring 설계 의도
+
+`Map<String, T>` 자동 주입의 키가 빈 이름으로 고정된 이유는, 그 메커니즘이 애초에 "타입 T의 빈들을 이름별로 구분해 달라"는 범용 요청이기 때문이다 — Spring 컨테이너는 `NotificationPlugin`이 `type()`이라는 자체 식별자를 갖고 있다는 걸 알 방법이 없다(그건 우리 도메인 개념이다). 그래서 "빈 이름이 아닌 다른 기준으로 색인하고 싶다"는 요구는 컨테이너가 대신해 줄 수 없고, 항상 애플리케이션 코드(이 경우 `NotificationPluginRegistry`)가 스스로 조립해야 한다 — `List<T>` + `@Order`까지는 컨테이너가 정렬까지 해 주지만, 그 이상의 색인/조회 구조는 언제나 한 걸음 더 나아간 이용자 몫이라는 원칙을 보여준다.
+
+### 남겨둔 것
+
+- 활성화 여부를 외부 설정(`Environment`/프로퍼티)에서 읽어오지 않고 `enabled()`를 코드에 고정했다 — 이 실험의 초점이 "활성화 상태가 DI 후보 선택에 영향을 주지 않는다"는 것 자체라, 설정 바인딩까지 더하면 초점이 흐려진다고 판단했다(프로젝트 4의 YAML 바인딩과는 다른 문제).
+- `firstEnabled()`가 폴백 체인(1순위 실패 시 2순위 시도)까지 하지는 않는다 — 지금은 "가장 먼저 발견된, 켜져 있는 플러그인 하나"만 고른다.

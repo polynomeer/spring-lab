@@ -32,6 +32,7 @@ include(
     "spring-extensions:mini-observability-starter:autoconfigure",
     "spring-extensions:mini-observability-starter:starter",
     "sample-app:transactional-outbox-order",
+    "sample-app:plugin-discovery-system",
     "tools:jdi-tracer",
     "tools:learning-dashboard:backend",
 )

@@ -34,7 +34,7 @@
 | 4 | 빈 생성과 생명주기 | 완료 | [`04-bean-lifecycle/bean-lifecycle.md`](../04-bean-lifecycle/bean-lifecycle.md) |
 | 5 | BeanFactoryPostProcessor | 완료 (프로젝트 9는 1단계까지 — 나머지 3단계는 11~12주차로 미룸. 프로젝트 4는 나중에 진행해 14번 절에 추가) | [`05-beanfactory-postprocessor/beanfactory-postprocessor.md`](../05-beanfactory-postprocessor/beanfactory-postprocessor.md) |
 | 6 | BeanPostProcessor | 완료 (새 실험 없이 4·5주차 종합 + `getEarlyBeanReference` 소스 분석) | [`06-beanpostprocessor/beanpostprocessor.md`](../06-beanpostprocessor/beanpostprocessor.md) |
-| 7 | 컴포넌트 스캔 | 완료 | [`07-component-scan/component-scan.md`](../07-component-scan/component-scan.md) |
+| 7 | 컴포넌트 스캔 | 완료 (프로젝트 11은 나중에 진행해 13번 절에 추가) | [`07-component-scan/component-scan.md`](../07-component-scan/component-scan.md) |
 | 8 | `@Configuration`과 `@Bean` | 완료 | [`08-configuration-bean/configuration-bean.md`](../08-configuration-bean/configuration-bean.md) |
 | 9 | 생성자 주입과 의존성 탐색 | 완료 | [`09-dependency-resolution/dependency-resolution.md`](../09-dependency-resolution/dependency-resolution.md) |
 | 10 | `@Primary`, `@Qualifier`와 순환 참조 | 완료 | [`10-primary-qualifier-circular/primary-qualifier-circular.md`](../10-primary-qualifier-circular/primary-qualifier-circular.md) |

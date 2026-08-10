@@ -40,7 +40,7 @@ spring-internals-lab/
 | 8 | Configuration Property Rewriter | 완료 | [`spring-extensions/configuration-property-rewriter`](../../spring-extensions/configuration-property-rewriter) |
 | 9 | Method Timing BeanPostProcessor | 완료 — 2~4단계(ProxyFactory/Pointcut+Advisor/자동 프록시 생성기 비교)까지 마무리 | [`spring-extensions/method-timing-post-processor`](../../spring-extensions/method-timing-post-processor) |
 | 10 | Mini Component Scanner | 완료 | [`mini-spring/mini-component-scan`](../../mini-spring/mini-component-scan) |
-| 11 | Plugin Auto Discovery | 미착수 | — |
+| 11 | Plugin Auto Discovery | 완료 | [`sample-app/plugin-discovery-system`](../../sample-app/plugin-discovery-system) |
 | 12 | Configuration Proxy Experiment | 완료 | [`experiments/configuration-proxy-lab`](../../experiments/configuration-proxy-lab) |
 | 13 | Mini Java Config Parser | 완료 | [`mini-spring/mini-java-config`](../../mini-spring/mini-java-config) |
 | 14 | Dependency Resolution Matrix | 완료 | [`experiments/dependency-resolution-matrix`](../../experiments/dependency-resolution-matrix) |
