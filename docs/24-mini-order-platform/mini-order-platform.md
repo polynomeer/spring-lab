@@ -27,6 +27,7 @@ sample-app/mini-order-platform/
     discount/   - DiscountPolicy 전략(@Qualifier로 명시 선택), PricingService
     notification/ - NotificationChannel(email/sms), NotificationDispatcher, SentNotificationLog
     plugin/     - SelfDescribingPlugin 마커, PluginCatalog, PluginRegistrationBeanPostProcessor
+    aop/        - @Timed/@RequiresRole/@Audited/@Retryable/@IdempotencyGuarded 애노테이션 + 5개 @Aspect
     OrderPlatformConfig.java - @ComponentScan 진입점
 ```
 
@@ -41,7 +42,11 @@ sample-app/mini-order-platform/
 | 빈 생명주기 | 외부 클라이언트 초기화 | ✅ Phase 1 | `PaymentGatewayClient#connect` |
 | 빈 생명주기 | 리소스 종료 | ✅ Phase 1 | `PaymentGatewayClient#disconnect` |
 | 빈 생명주기 | 커스텀 BeanPostProcessor | ✅ Phase 1 | `PluginRegistrationBeanPostProcessor` |
-| AOP | 실행 시간 측정 / 권한 검사 / 감사 로그 / 재시도 / 멱등성 검사 | ⬜ Phase 2 | - |
+| AOP | 실행 시간 측정 | ✅ Phase 2 | `TimingAspect` |
+| AOP | 권한 검사 | ✅ Phase 2 | `AuthorizationAspect` |
+| AOP | 감사 로그 | ✅ Phase 2 | `AuditAspect` |
+| AOP | 재시도 | ✅ Phase 2 | `RetryAspect` |
+| AOP | 멱등성 검사 | ✅ Phase 2 | `IdempotencyAspect` |
 | 트랜잭션 | 주문+Outbox / 결제 이력 분리(`REQUIRES_NEW`) / rollback-only | ⬜ Phase 3 | - |
 | MVC | 커스텀 인증 Resolver / 공통 응답 / 예외 처리 / 커스텀 Converter | ⬜ Phase 4 | - |
 | 이벤트 | 주문 완료 이벤트 / 알림 발송 / Outbox 발행 / 커밋 후 처리 | ⬜ Phase 5 | - |
@@ -86,9 +91,55 @@ sample-app/mini-order-platform/
 | `chargingBeforeTheClientHasConnectedThrows` | 경계 조건 — 컨테이너를 거치지 않으면 콜백이 호출되지 않음 |
 | `customBeanPostProcessorAutoRegistersEveryPluginRegardlessOfHowItWasDeclared` | BPP가 등록 방식과 무관하게 모든 플러그인 빈을 정확히 수집함 |
 
-## 5. 남은 Phase (TODO)
+## 5. Phase 2 — AOP
 
-- **Phase 2 — AOP**: 실행 시간 측정, 권한 검사, 감사 로그, 재시도, 멱등성 검사. `PluginCatalog`에 AOP 프록시를 적용해 4.3의 BPP 조기 생성 경계를 실제로 재현해 볼 계획.
+카탈로그가 요구한 5가지 관심사(실행 시간 측정/권한 검사/감사 로그/재시도/멱등성 검사)를 각각 독립된 `@Aspect`로 구현하고, `@EnableAspectJAutoProxy` 기반 실제 Spring AOP 프록시(11~12주차에서 이미 검증한 것과 같은 CGLIB 서브클래스 프록시 메커니즘)로 적용했다 - `mini-spring/mini-aop`처럼 축소 재구현하는 대신 실제 Spring AOP를 그대로 썼다(이 캡스톤 프로젝트 자체가 "배운 걸 실전에서 조립하는" 성격이라, mini 재구현은 이미 12주차에서 끝냈다고 보고 여기서는 반복하지 않기로 했다).
+
+### 5.1 다섯 개 관심사가 겹쳤을 때의 순서
+
+같은 메서드에 여러 애노테이션이 동시에 붙을 수 있으므로(`PaymentProcessingService` 참고), `@Order`로 명시적인 어드바이스 순서를 정했다 - 순서를 정하지 않으면 Spring이 등록 순서 등 예측하기 어려운 기준으로 어드바이스 체인을 구성하기 때문이다.
+
+```text
+바깥쪽 → 안쪽
+@Order(1) TimingAspect        - 재시도까지 포함한 전체 소요 시간을 재야 하므로 가장 바깥
+@Order(2) AuditAspect         - 재시도의 각 시도가 아니라 "최종 결과" 하나만 감사 로그에 남겨야 함
+@Order(3) AuthorizationAspect - 권한이 없으면 캐시 조회/재시도 비용을 전혀 들이지 않고 즉시 실패
+@Order(4) IdempotencyAspect   - 이미 성공한 키라면 재시도 루프 자체에 들어갈 필요가 없음
+@Order(5) RetryAspect         - 실제 대상 메서드에 가장 가까운 자리에서만 일시적 실패를 재시도
+```
+
+이 순서를 코드가 아니라 말로 설명하면 그럴듯하지만, `PaymentProcessingServiceIntegrationTest`가 실제로 검증하는 건 순서 값 자체가 아니라 그 순서가 만들어내는 **관찰 가능한 행동**이다:
+
+- `repeatedProcessPaymentWithSameIdempotencyKeyDoesNotChargeTwice` — 같은 멱등성 키로 두 번 호출해도 `PaymentResult.transactionId()`(내부적으로 `System.nanoTime()`을 포함)가 동일하다는 것으로 "두 번째 호출이 실제 게이트웨이까지 도달하지 않았다"를 간접 증명한다. 반면 `TimingLog`/`AuditLog`는 호출마다(캐시 히트여도) 기록이 남는다 — Timing/Audit이 Idempotency보다 바깥쪽에 있기 때문에 나오는, 처음엔 직관적이지 않았던 결과.
+- `refundRequiresAdminRoleAndDeniedAttemptIsStillAudited` — 권한 거부(`AccessDeniedException`)도 감사 로그에 실패로 정확히 남는다 — Auth가 Audit보다 안쪽이라 그 예외가 Audit을 그대로 통과해 올라가기 때문.
+- `pingProviderRecoversFromTransientFailuresViaRetry` / `pingProviderGivesUpWhenFailuresExceedMaxAttempts` — Retry가 `maxAttempts` 안에서 정확히 마지막 시도에 성공하면 예외 없이 반환하고, 다 소진하면 마지막 실패를 그대로 다시 던진다. `TimingLog`는 재시도 3번을 포함해도 딱 1건만 남는다 — Timing이 Retry 바깥쪽이라는 증거.
+
+### 5.2 IdempotencyStore와 실패의 관계
+
+`IdempotencyStore#computeIfAbsent`는 `ConcurrentHashMap#computeIfAbsent`를 그대로 쓴다 — 이 메서드는 "supplier가 예외를 던지면 아무것도 캐시하지 않는다"는 계약을 갖고 있다(자바 표준 라이브러리 문서에 명시됨). 그 덕분에 `IdempotencyAspect`를 따로 구현하지 않고도 "실패한 시도는 멱등성 캐시에 남지 않고, 같은 키로 다시 호출하면 처음부터(재시도 포함) 다시 실행된다"가 공짜로 보장된다 — 프로젝트 23(트랜잭셔널 아웃박스)의 "성공한 것만 멱등하게 재사용한다"는 원칙과 같은 결의 설계다.
+
+### 5.3 예상과 달랐던 것 — BeanPostProcessor 조기 생성과 AOP 프록시의 실제 경계
+
+Phase 1(§4.3)에서 `PluginRegistrationBeanPostProcessor`가 `PluginCatalog`를 조기 생성시킨다고 적었을 때는 이게 실제로 문제가 되는 걸 본 적이 없어서 추측이었다. Phase 2에서 실제로 확인했다: `PaymentProcessingService`는 `@Timed`/`@Audited`/`@RequiresRole`/`@IdempotencyGuarded`/`@Retryable` 중 하나라도 걸린 메서드가 있어서 AOP 프록시 대상이 되지만, **`PluginRegistrationBeanPostProcessor` 자신이나 `PluginCatalog`, `TimingLog`, `AuditLog`, `IdempotencyStore` 같은 인프라 빈에는 어떤 AOP 애노테이션도 걸지 않았다** — 그래서 이번 Phase에서는 실제로 조기 생성 vs 프록시 우회 충돌이 발생하지 않았다. 즉, "위험한 조합"(BPP가 의존하는 빈에 AOP 어드바이스가 걸려 있는 경우)을 코드로 직접 재현하지는 못했다 — 이건 의도적으로 인프라 빈들을 AOP 대상에서 제외했기 때문이며, 이 경계를 직접 깨 보는 실험은 이 문서의 범위 밖으로 남겨 둔다(궁금하면 `PluginCatalog`에 `@Timed`를 걸어 `PluginRegistrationBeanPostProcessor`가 원본 인스턴스를 받는지 프록시를 받는지 확인해 볼 수 있다).
+
+### 5.4 테스트
+
+[`AopAspectUnitTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/aop/AopAspectUnitTest.java) (7개, `AspectJProxyFactory`로 어드바이스 하나씩만 격리해서 검증):
+
+| 테스트 | 확인하는 것 |
+| --- | --- |
+| `timingAspectRecordsElapsedTimeAroundTheCall` | 정상 흐름 — 실행 시간이 기록됨 |
+| `authorizationAspectAllowsMatchingRoleAndDeniesOthers` | 역할이 맞으면 통과, 다르면 `AccessDeniedException` |
+| `auditAspectRecordsBothSuccessAndFailureExactlyOnce` | 성공/실패 각각 정확히 한 번씩만 기록되고, 실패는 원래 예외를 그대로 다시 던짐 |
+| `idempotencyAspectSkipsReExecutionForARepeatedKey` | 같은 키 재호출은 실제 실행을 건너뜀, 다른 키는 실행됨 |
+| `retryAspectRetriesUntilSuccessWithinMaxAttempts` | 경계 조건 — 마지막 시도에서 성공하면 그 결과를 반환 |
+| `retryAspectGivesUpAfterMaxAttemptsAndRethrowsTheLastFailure` | 경계 조건 — `maxAttempts`를 넘기면 마지막 실패를 다시 던짐 |
+| `retryAspectDoesNotRetryAnExceptionTypeItWasNotConfiguredFor` | 경계 조건 — `retryFor()`에 해당하지 않는 예외는 재시도 없이 즉시 전파 |
+
+[`PaymentProcessingServiceIntegrationTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/payment/PaymentProcessingServiceIntegrationTest.java) (4개, 실제 `AnnotationConfigApplicationContext` + `@EnableAspectJAutoProxy` 기반 — 여러 어드바이스가 실제로 겹쳤을 때의 동작만 다룸): §5.1에 기록한 4가지 시나리오.
+
+## 6. 남은 Phase (TODO)
+
 - **Phase 3 — 트랜잭션**: Order/Payment 도메인 도입, 주문+Outbox 저장(23주차 아웃박스 패턴 재사용), 결제 이력을 `REQUIRES_NEW`로 분리, rollback-only 실험.
 - **Phase 4 — MVC**: `@CurrentMember` 커스텀 ArgumentResolver, 공통 `ApiResponse<T>` 응답(`spring-extensions/api-response-handler` 재사용), `@ControllerAdvice`, 커스텀 `Converter`.
 - **Phase 5 — 이벤트**: 주문 완료 이벤트 → 알림 발송(4장에서 만든 `NotificationDispatcher` 재사용) + Outbox 발행을 `@TransactionalEventListener(AFTER_COMMIT)`으로 연결.
