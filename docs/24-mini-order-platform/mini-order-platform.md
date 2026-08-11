@@ -358,3 +358,33 @@ UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?
 | `adminCanCreateAProductAndAnyoneCanReadItBack` / `customerCannotCreateAProduct` / `fetchingAMissingProductReturns404` | 실제 HTTP 요청 — 등록은 관리자 전용, 조회는 인증 없이 가능 |
 
 모듈 전체 테스트는 43개에서 54개로 늘었다.
+
+## 12. 상품 도메인 다음 — 동시성 검증
+
+11번 절은 `ProductRepository.decreaseStock()`이 `UPDATE ... WHERE stock >= ?` 한 문장으로 조회·조건 검사·갱신을 원자적으로 묶는다고 설명했지만, 그걸 뒷받침하는 테스트는 전부 **순차 호출**이었다 - 재고를 미리 세팅해 두고 한 번 호출해서 성공/실패를 확인하는 식이었다. 지금까지 이 캡스톤(그리고 사실 이 저장소 전체)의 어떤 테스트도 진짜 스레드 두 개 이상이 **동시에** 같은 행을 놓고 경쟁하는 상황을 만들어 본 적이 없었다. 이 절은 `ExecutorService` + `CountDownLatch`로 진짜 경쟁 조건을 재현해서, 그 주장을 순차 테스트가 아니라 동시성 테스트로 다시 검증한다.
+
+### 12.1 왜 애플리케이션 코드가 락을 직접 잡지 않아도 되는가
+
+H2 2.x는 기본적으로 MVCC를 쓰고, `UPDATE` 문은 격리 수준(isolation level)과 무관하게 항상 대상 행에 쓰기 락을 건다 - 이건 H2만의 특성이 아니라 관계형 DB 엔진의 일반적인 동작이다. 그래서 두 트랜잭션이 동시에 같은 상품 행을 `UPDATE`하려고 하면, 나중에 도착한 쪽은 예외를 던지는 대신 첫 번째 트랜잭션이 끝날 때까지 그냥 **대기**했다가, 그 이후의(이미 줄어든) 재고 값을 놓고 자신의 `WHERE stock >= ?` 조건을 다시 평가한다. 애플리케이션 코드가 `synchronized`나 분산 락 같은 걸 직접 구현할 필요가 없는 이유가 바로 이거다 - 판단(재고가 충분한가?)과 갱신(재고를 줄인다)이 원자적인 단일 SQL 문 안에 있으면, DB 엔진의 행 락이 그 판단-갱신 사이의 경쟁을 대신 막아 준다.
+
+### 12.2 두 계층에서 각각 확인
+
+**저장소 계층** — [`ProductRepositoryConcurrencyTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/product/ProductRepositoryConcurrencyTest.java)는 `OrderPlacementService`를 거치지 않고 `ProductRepository.decreaseStock()`만 떼어서, 재고보다 훨씬 많은 스레드(재고 3개에 8개 스레드)가 동시에 경쟁했을 때도 성공 건수가 정확히 초기 재고 수(3)와 같은지 확인한다. `CountDownLatch` 두 개(`ready`/`start`)로 모든 스레드가 준비를 마친 뒤 한꺼번에 출발하도록 강제해서, 우연히 순차적으로 실행되는 걸 방지했다. 재고가 넉넉해서 아무도 거절당하지 않는 경우(재고 100, 동시 시도 50)도 별도로 확인한다 - "조회 후 갱신"으로 잘못 짰다면 동시 갱신 중 일부가 유실돼 재고가 실제보다 많이 남았을 텐데, 성공 건수와 실제 차감량이 정확히 일치하는지를 본다.
+
+**서비스 계층(실제 호출 경로)** — [`OrderPlacementConcurrencyTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/order/OrderPlacementConcurrencyTest.java)는 `ProductRepository`만이 아니라 `OrderPlacementService.placeOrder()` 전체(결제/AOP/트랜잭션/이벤트가 전부 얽힌 실제 경로)를 통해서도 같은 원자성이 유지되는지 확인한다 - 재고 1개짜리 상품을 "고객 A"와 "고객 B"가 동시에 주문하면 정확히 한 명만 성공(`Order`가 `PAID`로 반환됨)하고 다른 한 명은 `InsufficientStockException`으로 실패해야 한다.
+
+**직접 겪은 것(설계 시점에 미리 피한 함정)**: `CurrentActor`는 ThreadLocal이라, 테스트를 실행하는 메인 스레드에서 `set()`해 봐야 실행기(`ExecutorService`)가 만든 작업 스레드에는 전혀 보이지 않는다 - Phase 4의 `CurrentMemberArgumentResolver`가 실제 서블릿 요청 스레드마다 해 주는 일을, 여기서는 각 작업 스레드가 `placeOrder()`를 호출하기 직전에 스스로 해야 한다. 이걸 놓쳤다면 "no CurrentActor set for this thread"로 즉시 실패했을 텐데, Phase 4에서 이미 ThreadLocal의 이 성질을 문서화해 둔 덕분에 처음부터 올바르게 짰다.
+
+### 12.3 기존 인프라가 이미 동시성에 대비돼 있었다는 뜻밖의 확인
+
+이 테스트를 준비하면서 `OrderPlacementService`가 실제로 건드리는 공유 상태(싱글턴 빈들의 내부 필드)를 다시 훑어봤다 - `TimingLog`/`AuditLog`/`SentNotificationLog`는 전부 `CopyOnWriteArrayList`, `IdempotencyStore`는 `ConcurrentHashMap`, `IdGenerator`는 `AtomicLong`이었다. 전부 Phase 1~5를 진행하며 "여러 항목을 기록하는 로그"라는 이유만으로 무심코 선택했던 자료구조들인데, 결과적으로 이번 동시성 테스트가 그 선택이 실제로 스레드 안전했다는 걸 사후에 증명해 준 셈이다 - 당시엔 동시성을 염두에 두고 고른 게 아니라 그냥 "이 저장소의 다른 로그들도 이렇게 짰으니까" 따라간 선택이었는데, 그 관성적인 일관성이 우연히 옳았다.
+
+### 12.4 테스트
+
+| 테스트 | 확인하는 것 |
+| --- | --- |
+| `exactlyAsManyConcurrentDecrementsSucceedAsThereIsStock` | 경계 조건 — 재고보다 많은 스레드가 동시에 경쟁해도 성공 건수가 정확히 재고 수만큼 |
+| `decrementsAreNeverLostEvenUnderHeavyContentionOnAmpleStock` | 경계 조건 — 재고가 충분해도 동시 갱신 중 일부가 유실되지 않음(성공 건수 = 실제 차감량) |
+| `twoCustomersRacingForTheLastUnitOnlyOneOrderSucceeds` | 정상 흐름 + 경계 — 실제 호출 경로(결제/AOP/트랜잭션/이벤트 포함) 전체에서도 정확히 한 명만 성공 |
+
+모듈 전체 테스트는 54개에서 57개로 늘었다.
