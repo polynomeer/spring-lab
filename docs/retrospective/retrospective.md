@@ -2,7 +2,7 @@
 
 [`docs/plan/01-roadmap.md`](../plan/01-roadmap.md)가 요구하는 최종 산출물이다. 1주차(IoC와 BeanFactory)부터 16주차(컨트롤러 메서드 호출과 응답 변환)까지 핵심 8단계(IoC 컨테이너 → 빈 생명주기 → 확장점 → 컴포넌트 스캔/DI → AOP → 트랜잭션 → Spring MVC)를 마친 뒤, 선택 과정인 17~20주차(Spring Boot 내부 - `SpringApplication`, 자동 설정, 조건부 설정, Starter 직접 구현)까지 이어서 완주했다. 이 문서는 그 20개 문서를 가로지르는 반복된 패턴과 직접 부딪힌 버그들을 정리하는 데 집중한다. 개별 주차의 세부 내용은 각 문서를 참고한다.
 
-**후기**: 아래 0~7번 절은 20주차를 완주한 시점 그대로 남겨 뒀다 — 그 뒤로 21~23주차(애플리케이션 이벤트, MVC 예외 처리 우선순위, 트랜잭셔널 아웃박스)를 추가로 진행하고, `tools/learning-dashboard`(jdi-tracer 기반 시각화 도구, 7개 시나리오)를 만들고, 카탈로그에 남아 있던 마지막 두 프로젝트(4번 동적 빈 등록기, 11번 Plugin Auto Discovery)까지 마치면서 [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md)의 32개 프로젝트가 전부 완료됐다. 그 경과는 [8번 절](#8-20주-이후--카탈로그-32개-프로젝트-완주와-학습-대시보드)에 정리했다 — 특히 7번 절("남겨 둔 질문")이 "여전히 미착수"라고 적어 둔 항목들은 지금은 전부 끝났다는 것만 미리 밝혀 둔다.
+**후기**: 아래 0~7번 절은 20주차를 완주한 시점 그대로 남겨 뒀다 — 그 뒤로 21~23주차(애플리케이션 이벤트, MVC 예외 처리 우선순위, 트랜잭셔널 아웃박스)를 추가로 진행하고, `tools/learning-dashboard`(jdi-tracer 기반 시각화 도구, 7개 시나리오)를 만들고, 카탈로그에 남아 있던 마지막 두 프로젝트(4번 동적 빈 등록기, 11번 Plugin Auto Discovery)까지 마치면서 [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md)의 32개 프로젝트가 전부 완료됐다. 그 경과는 [8번 절](#8-20주-이후--카탈로그-32개-프로젝트-완주와-학습-대시보드)에 정리했다 — 특히 7번 절("남겨 둔 질문")이 "여전히 미착수"라고 적어 둔 항목들은 지금은 전부 끝났다는 것만 미리 밝혀 둔다. 그리고 그 32개 다음으로, 카탈로그가 번호를 매기지 않고 별도 절(16번 절 "종합 프로젝트 추천")로 남겨 뒀던 캡스톤 `Mini Order Platform`(IoC부터 Boot까지 6개 Phase를 하나의 애플리케이션으로 통합)까지 완주했다 — [9번 절](#9-32개-다음--mini-order-platform-캡스톤-완주)에 정리했다.
 
 ## 0. 숫자로 보는 20주
 
@@ -204,3 +204,32 @@ mini-webmvc (15~16주차, project 27)
 ### 8.5 마무리
 
 2번 절에서 뽑아낸 패턴들("확장점은 좁고 합성 가능하게 쪼갠다", "정교한 판단보다 예측 가능한 순서")은 21~23주차와 마지막 두 프로젝트에서도 형태만 바뀌어 그대로 반복됐다 - `BeanDefinitionRegistryPostProcessor` 하나가 코드 기반이든(5주차) 설정 기반이든(프로젝트 4) 조건 기반이든(18~19주차) 같은 확장점으로 수렴하는 것처럼. 그리고 3번 절의 결론("직접 실행해서 확인하기 전엔 안다고 확신할 수 없다")은 새 주제뿐 아니라 **이미 완료 표시를 해 둔 문서**에도 예외가 아니었다(8.3절) - 이 저장소의 방법론(`docs/plan/00-methodology.md`의 순환)이 "한 번 통과하면 끝"이 아니라, 다른 도구·다른 각도로 다시 검증할 때마다 값어치를 계속 낸다는 것을 32번째 프로젝트까지 와서 다시 확인한 셈이다.
+
+## 9. 32개 다음 — Mini Order Platform 캡스톤 완주
+
+[`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md) 16번 절 "종합 프로젝트 추천"은 32개 번호 프로젝트와 별도로, 회원/상품/주문/결제/알림/감사 로그 도메인 위에서 IoC부터 Boot까지 배운 것 전부를 하나의 애플리케이션으로 통합하는 캡스톤(`sample-app/mini-order-platform`)을 20주 로드맵의 원래 마지막 단계로 그려 뒀다 - 8번 절이 마무리될 때까지도 손대지 않았던 유일한 항목이다. 여섯 개 Phase(IoC+생명주기 → AOP → 트랜잭션 → MVC → 이벤트 → Boot)로 나눠 순서대로 진행했고, 각 Phase가 끝날 때마다 실제 테스트로 검증한 뒤 다음 Phase로 넘어갔다 - 상세 설계와 발견 사항은 전부 [`docs/24-mini-order-platform/mini-order-platform.md`](../24-mini-order-platform/mini-order-platform.md)에 Phase별로 누적 기록해 뒀고, 이 절은 그중 반복해서 배울 만한 것만 추린다.
+
+### 9.1 숫자로 보는 지금
+
+- 코드 모듈 35개(8번 절 시점의 34개에서 `sample-app/mini-order-platform` 1개 추가) - 새 모듈이지만 새 최상위 역할(experiments/mini-spring/spring-extensions/sample-app/tools)을 만들지는 않았다, `sample-app/`의 세 번째 구성원일 뿐이다
+- 이 모듈 하나의 테스트가 43개(전부 실제 Spring 컨테이너/임베디드 H2/MockMvc를 통과하는 통합 테스트, 목 없음) - 저장소 전체 자동화 테스트는 8번 절의 283개에서 326개로 늘었다
+- 새 주제 문서를 쓰지 않고 `docs/24-mini-order-platform/`라는 새 디렉터리 하나로 여섯 Phase를 전부 담았다 - 다른 주제 문서들과 달리 다이어그램은 아직 없다(진행 중 누적 기록이라는 성격상 뒤로 미뤄 둔 것 - 완료된 지금은 남은 선택적 보강 항목이다)
+
+### 9.2 여섯 Phase, 한 줄씩
+
+- **Phase 1(IoC+생명주기)**: 같은 "여러 빈 중 선택" 문제를 세 가지 다른 방식(List→Map 재구성, `@Qualifier` 명시 고정, List 그대로 브로드캐스트)으로 나란히 구현해서 언제 뭘 쓰는지 비교했다. `PaymentGatewayClient`를 컨테이너 없이 `new`로 만들면 `@PostConstruct`가 호출되지 않는다는 걸로 "DI 컨테이너는 단순 생성이 아니다"를 재확인했다.
+- **Phase 2(AOP)**: 실행시간측정/권한검사/감사로그/재시도/멱등성 다섯 개 어드바이스를 `@Order`로 명시적으로 쌓았다. 재시도가 가장 안쪽, 타이밍이 가장 바깥쪽이어야 하는 이유를 "재시도까지 포함한 전체 시간을 재야 한다"는 요구에서 거꾸로 도출했다.
+- **Phase 3(트랜잭션)**: 주문+Outbox는 같은 트랜잭션으로 묶고, 결제 시도 이력은 `REQUIRES_NEW`로 분리해서 결제가 실패해도 "시도했다는 사실"만은 살아남게 했다. `OrderCancellationService`로 rollback-only 실험(내부 REQUIRED 예외를 삼켜도 트랜잭션은 이미 rollback-only)을 Order 도메인 위에서 재현했다.
+- **Phase 4(MVC)**: `@RequestParam`에 커스텀 `Converter<String, PaymentMethod>`를 걸어 특정 enum 값을 거절하려다가, Spring의 `TypeConverterDelegate`가 컨버터 실패를 삼키고 `Enum#valueOf()`로 조용히 재시도하는 하위 호환 fallback을 실제로 만났다 - enum을 `@RequestParam` 타입으로 직접 쓰면 아무리 구체적인 Converter를 등록해도 그 값을 거절할 수 없다는 게 이번에 확인한 일반화되는 결론이다. 대상 타입을 enum이 아닌 래퍼 타입으로 바꿔 우회했다.
+- **Phase 5(이벤트)**: "저장"(Outbox 행 기록)은 트랜잭션 안에서 직접, "부작용"(알림 발송·실제 발행)은 `@TransactionalEventListener(AFTER_COMMIT)`으로 분리했다. `TransactionTemplate`로 직접 트랜잭션을 열고 롤백시켜 "커밋되지 않으면 AFTER_COMMIT 리스너가 아예 실행되지 않는다"를 재확인했다.
+- **Phase 6(Boot)**: 아래 9.3에서 따로 다룰 만큼 이 캡스톤에서 가장 오래 걸린 Phase였다.
+
+### 9.3 가장 크게 배운 것 — 개별 Phase에서는 안 보이던 것, 합치는 순간 드러난 것
+
+Phase 1~5는 각자 새 개념 하나씩을 새 코드로 검증하는 식이라, 지금까지의 32개 프로젝트와 본질적으로 같은 리듬이었다. Phase 6에서 처음으로 다른 종류의 버그를 만났다 - **개별 Phase 각각은 옳았는데, 여섯 개를 한 애플리케이션으로 합치는 순간에만 드러나는 상호작용**이었다.
+
+`OrderPlatformApplication`(진입점, `@EnableAutoConfiguration`)을 다른 자동 설정 클래스들과 같은 `boot` 패키지에 뒀는데, Phase 1~5 내내 잘 써 온 `OrderPlatformConfig`/`OrderWebConfig`의 컴포넌트 스캔이 그 패키지까지 통째로 훑고 있었다. `@EnableAutoConfiguration`은 **컴포넌트 스캔으로 발견되기만 해도 그대로 활성화**된다는 걸 몰랐던 게 아니라, "이 진입점 클래스가 다른 목적의 스캔에 우연히 걸릴 수 있다"는 걸 설계 시점에 생각하지 못했다 - 그 결과 Boot 표준 자동 설정(SQL 초기화 포함) 전체가 순수 비-Boot 테스트 컨텍스트 안으로 끌려들어와 `JdbcConfig`가 이미 실행해 둔 `schema.sql`을 또 실행하려다 깨졌다. 고치고 나니 두 번째, 세 번째 문제가 연달아 나왔다 - project 32의 테스트 패턴(중첩 `@Configuration` 픽스처)이 같은 이유로 다른 테스트를 오염시켰고(`ApplicationContextRunner#withBean`으로 우회), 진짜 Boot 부트스트랩에서는 우리 스키마 초기화와 Boot의 자동 스키마 초기화가 실제로(우연이 아니라) 겹치는 진짜 충돌도 있었다(`SqlInitializationAutoConfiguration` 명시적 제외로 해결). 전부 [`docs/24-mini-order-platform/mini-order-platform.md`](../24-mini-order-platform/mini-order-platform.md) 9번 절에 순서대로 기록했다.
+
+### 9.4 마무리
+
+2번 절이 뽑아낸 패턴("확장점은 좁고 합성 가능하게 쪼갠다")은 이 캡스톤 안에서도 그대로였다 - AOP 다섯 어드바이스, 트랜잭션 전파 두 가지(REQUIRED/REQUIRES_NEW), 이벤트 리스너 두 개가 전부 서로 독립적으로 짜여서 필요할 때만 조합됐다. 하지만 8번 절까지는 "합성 가능한 좁은 조각들"이 실제로 **합성되는 지점**을 검증할 기회가 별로 없었다 - 매 프로젝트가 대체로 독립된 모듈이었기 때문이다. Mini Order Platform은 처음으로 그 조각들을 전부 한 애플리케이션에 실제로 합성해 봤고, 9.3의 버그들은 정확히 "각 조각은 옳지만 합쳐지는 방식이 틀렸다"는 새로운 종류의 실패였다 - 개별 개념 검증(단위 테스트 수준)과 애플리케이션 구성 검증(패키지 구조·스캔 경계·초기화 순서 수준)이 서로 다른 종류의 실수를 낳는다는 걸, 32개 프로젝트를 다 끝낸 뒤에야 이 캡스톤에서 처음 겪었다.
