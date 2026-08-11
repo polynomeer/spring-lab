@@ -53,10 +53,15 @@ class OrderPlacementServiceTest {
                 .hasSize(1)
                 .allMatch(PaymentHistoryEntry::success);
 
+        // published=true는 이 테스트가 Phase 3에서 처음 작성됐을 때는 없던 단언이다 - 그때는
+        // Outbox "저장"까지만 있고 "발행"은 아직 없어서 여기서 항상 false였다. Phase 5가
+        // OrderCompletedEvent에 대한 AFTER_COMMIT 리스너(OutboxPublishListener)를 추가한
+        // 뒤로는, placeOrder()가 반환한 시점에 이미 커밋 직후 발행 시도까지 동기적으로 끝나
+        // 있다 - 발행 세부 동작 자체는 OrderCompletionEventTest(Phase 5)가 다룬다.
         OrderOutboxRepository outboxRepository = ctx.getBean(OrderOutboxRepository.class);
         assertThat(outboxRepository.findByOrderId(placed.id()))
                 .hasSize(1)
-                .allMatch(event -> event.eventType().equals("ORDER_PAID") && !event.published());
+                .allMatch(event -> event.eventType().equals("ORDER_PAID") && event.published());
     }
 
     @Test

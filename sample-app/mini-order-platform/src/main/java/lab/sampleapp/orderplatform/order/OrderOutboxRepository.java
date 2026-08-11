@@ -29,4 +29,16 @@ public class OrderOutboxRepository {
                         rs.getString("payload"), rs.getBoolean("published")),
                 orderId);
     }
+
+    public List<OrderOutboxEvent> findUnpublished() {
+        return jdbcTemplate.query(
+                "SELECT id, order_id, event_type, payload, published FROM order_outbox_events WHERE published = FALSE",
+                (rs, rowNum) -> new OrderOutboxEvent(
+                        rs.getLong("id"), rs.getLong("order_id"), rs.getString("event_type"),
+                        rs.getString("payload"), rs.getBoolean("published")));
+    }
+
+    public void markPublished(long id) {
+        jdbcTemplate.update("UPDATE order_outbox_events SET published = TRUE WHERE id = ?", id);
+    }
 }

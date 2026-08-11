@@ -12,7 +12,7 @@
 주문(Order)      - id, memberId, amountWon, status(PENDING/PAID/CANCELLED) - Phase 3
 결제(Payment)    - PaymentGateway 전략(CARD/POINT), PaymentGatewayClient(외부 PG 흉내), payment_history(주문과 분리 저장) - Phase 1/3
 알림(Notification) - NotificationChannel(email/sms), 컬렉션 주입으로 브로드캐스트
-감사 로그        - AuditLog(인메모리, Phase 2) - Phase 5(이벤트)에서 영속화 여부 검토 예정
+감사 로그        - AuditLog(인메모리, Phase 2) - Phase 5는 건드리지 않았다
 ```
 
 도메인을 처음부터 다 만들지 않고 "이번 Phase가 요구하는 만큼만" 만든다 — 이 저장소 전체가 지켜온 "축소 구현" 원칙을 캡스톤 안에서도 그대로 따른 것이다. Phase 4(MVC)를 진행하면서 실제로 필요한 API가 "주문 생성/조회/취소"와 "환불"뿐이라는 게 확인돼서 Product는 여전히 도입하지 않았다 - 애초에 "MVC를 다루려면 상품 목록 API가 있어야 한다"는 가정 자체가 틀렸었다.
@@ -32,7 +32,9 @@ sample-app/mini-order-platform/
                   OrderPlacementService, OrderValidator/OrderCancellationService(rollback-only), JdbcConfig
     web/        - @CurrentMember Resolver, PaymentMethodConverter, OrderResponseBodyAdvice,
                   OrderExceptionHandlers, OrderController/PaymentController, OrderWebConfig(@EnableWebMvc)
-    OrderPlatformConfig.java - Phase 1~3용 진입점(web 패키지는 스캔에서 제외)
+    event/      - OrderCompletedEvent, NotificationDispatchListener/OutboxPublishListener(AFTER_COMMIT),
+                  OrderOutboxPublisher, OrderEventBroker/FakeOrderEventBroker
+    OrderPlatformConfig.java - Phase 1~3, 5용 진입점(web 패키지만 스캔에서 제외)
 ```
 
 ## 3. 학습 요소 → 구현 매핑
@@ -58,7 +60,10 @@ sample-app/mini-order-platform/
 | MVC | 공통 응답 처리 | ✅ Phase 4 | `OrderResponseBodyAdvice`(+ project 26의 `ApiResponse<T>` 재사용) |
 | MVC | 예외 처리 | ✅ Phase 4 | `OrderExceptionHandlers` |
 | MVC | 커스텀 Converter | ✅ Phase 4 | `PaymentMethodConverter` |
-| 이벤트 | 주문 완료 이벤트 / 알림 발송 / Outbox 발행 / 커밋 후 처리 | ⬜ Phase 5 | - |
+| 이벤트 | 주문 완료 이벤트 | ✅ Phase 5 | `OrderCompletedEvent` |
+| 이벤트 | 알림 발송 | ✅ Phase 5 | `NotificationDispatchListener` |
+| 이벤트 | Outbox 발행 | ✅ Phase 5 | `OrderOutboxPublisher`/`OutboxPublishListener` |
+| 이벤트 | 트랜잭션 커밋 이후 처리 | ✅ Phase 5 | `@TransactionalEventListener(phase = AFTER_COMMIT)` |
 | Boot | 결제 클라이언트 AutoConfiguration / 알림 Starter / 요청 관측 Starter | ⬜ Phase 6 | - |
 
 ## 4. Phase 1 — IoC + 빈 생명주기
@@ -219,9 +224,42 @@ Order/PaymentHistory/OrderOutboxEvent를 `JdbcTemplate` + 임베디드 H2로 영
 
 **직접 겪은 실수**: 처음 두 테스트 클래스를 작성할 때 `@AfterEach`에서 `context.close()`를 빼먹었다. `JdbcConfig`의 `EmbeddedDatabaseBuilder`는 이름을 지정하지 않으면 항상 같은 기본 이름("testdb")을 쓰는데, 컨텍스트를 닫지 않고 다음 테스트로 넘어가면 이전 테스트의 인메모리 DB가 여전히 살아 있는 채로 다음 컨텍스트가 같은 이름으로 `schema.sql`을 다시 실행하려다가 "테이블이 이미 있다"는 SQL 문법 오류로 깨졌다 - `OrderPlacementServiceTest`(Phase 3)는 처음부터 `@AfterEach`를 갖추고 있어서 이 문제를 겪지 않았던 것뿐이었다.
 
-## 8. 남은 Phase (TODO)
+## 8. Phase 5 — 이벤트
 
-- **Phase 5 — 이벤트**: 주문 완료 이벤트 → 알림 발송(4장에서 만든 `NotificationDispatcher` 재사용) + Outbox 발행을 `@TransactionalEventListener(AFTER_COMMIT)`으로 연결.
+`OrderPlacementService.placeOrder()`는 주문이 `PAID`가 되고 Outbox 행을 저장한 직후(같은 트랜잭션 안에서) `OrderCompletedEvent`를 발행한다. 이 이벤트를 구독하는 `NotificationDispatchListener`와 `OutboxPublishListener`는 둘 다 `@TransactionalEventListener(phase = AFTER_COMMIT)`이다 - 21주차 애플리케이션 이벤트 문서에서 이미 소스로 확인한 메커니즘(`TransactionalApplicationListenerMethodAdapter`가 즉시 실행하는 대신 현재 트랜잭션의 동기화 콜백으로 등록해 둔다)을 Order 도메인 위에서 실제로 조립한 것이다.
+
+### 8.1 왜 "발행"은 이벤트를 거치고, "저장"은 거치지 않는가
+
+Outbox 행 저장(`outboxRepository.save(...)`)은 여전히 Phase 3처럼 `placeOrder()`의 트랜잭션 안에서 직접 호출한다 - 이건 주문 상태 변경과 원자적으로 묶여야 하는 로컬 DB 쓰기이지, "트랜잭션 밖의 시스템에 알려야 하는 일"이 아니기 때문이다. 반면 Outbox 행을 실제로 브로커에 **발행**하는 것과 회원에게 **알림을 보내는** 것은 둘 다 트랜잭션 밖의 부작용이고, 그 트랜잭션이 실제로 커밋됐는지 확인한 뒤에만 일어나야 한다 - 그래서 이 둘만 이벤트/`AFTER_COMMIT`을 거친다. "저장은 트랜잭션 안에서 직접, 부작용은 이벤트로 커밋 이후에"라는 이 구분이 이번 Phase가 실제로 보여주는 설계 원칙이다.
+
+### 8.2 직접 확인한 것 — AFTER_COMMIT은 정말 "미뤄질 뿐" 동기적이다
+
+`placingAnOrderDispatchesNotificationsAndPublishesTheOutboxEventAfterCommit` 테스트는 `service.placeOrder(...)` 호출이 **반환한 시점에** 이미 알림 발송과 Outbox 발행 시도까지 전부 끝나 있다고 가정하고 별도 대기 없이 바로 단언한다 - 그리고 실제로 통과한다. `AFTER_COMMIT` 콜백은 별도 스레드나 비동기 큐가 아니라, 트랜잭션 커밋 처리 자체의 마지막 단계로 호출자에게 제어가 돌아가기 전에 동기적으로 실행된다는 걸 이번에도 재확인했다(21주차 문서의 결론과 동일).
+
+### 8.3 rollback 시 리스너가 아예 실행되지 않음을 직접 재현
+
+`aRolledBackTransactionNeverRunsTheAfterCommitListeners` 테스트는 `OrderPlacementService`를 거치지 않고 `TransactionTemplate`로 직접 트랜잭션을 열어 `OrderCompletedEvent`를 발행한 뒤 예외를 던져 강제로 롤백시킨다 - 그 결과 `SentNotificationLog`/`OrderOutboxRepository` 둘 다 아무 흔적도 남지 않는다. `placeOrder()`의 실제 결제-실패 경로는 애초에 이벤트 발행 이전에 예외를 던지므로(주문 저장 자체가 롤백된다) 이 시나리오를 자연스럽게 재현하지 못한다 - 그래서 이 테스트만 별도로 트랜잭션을 직접 다룬다.
+
+**직접 겪은 것**: 처음엔 `ctx.getBean(ApplicationEventPublisher.class)`로 퍼블리셔를 얻으려다 `NoSuchBeanDefinitionException`을 봤다 - `ApplicationEventPublisher`는 컨테이너가 별도 빈으로 등록해 두는 게 아니라 `ApplicationContext` 자신이 구현하는 인터페이스라, 컨텍스트 참조를 그 타입으로 바로 쓰면 된다.
+
+### 8.4 Outbox 발행 실패는 여전히 유실을 의미하지 않는다
+
+`aBrokerFailureLeavesTheOutboxEventUnpublishedForTheNextPoll` 테스트는 `FakeOrderEventBroker.failNextSend()`로 커밋 직후의 발행 시도를 실패시킨다 - `OrderOutboxPublisher.publishPending()`이 그 예외를 안에서 잡아 두기 때문에 `placeOrder()`는 정상적으로 반환하고, 다만 그 Outbox 행은 `published=false`로 남는다. 이후 `publishPending()`을 다시 호출(실제 운영이라면 스케줄러의 다음 폴링)하면 그제서야 발행되고 `published=true`가 된다 - 23주차 아웃박스 문서에서 정리한 "발행 실패는 재시도할 수 있는 상태를 보장할 뿐, 실패 자체를 막아 주지 않는다"는 결론을 그대로 재사용한 것이다.
+
+### 8.5 테스트
+
+[`OrderCompletionEventTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/event/OrderCompletionEventTest.java) (3개, 실제 `AnnotationConfigApplicationContext` 기반):
+
+| 테스트 | 확인하는 것 |
+| --- | --- |
+| `placingAnOrderDispatchesNotificationsAndPublishesTheOutboxEventAfterCommit` | 정상 흐름 — 알림(email+sms) 발송, Outbox 발행이 커밋 직후 동기적으로 끝남 |
+| `aRolledBackTransactionNeverRunsTheAfterCommitListeners` | 경계 조건 — 롤백되면 AFTER_COMMIT 리스너가 아예 실행되지 않음 |
+| `aBrokerFailureLeavesTheOutboxEventUnpublishedForTheNextPoll` | 경계 조건 — 발행 실패는 유실이 아니라 재시도 가능한 상태로 남음 |
+
+**기존 테스트 업데이트**: Phase 3에서 작성한 `OrderPlacementServiceTest`의 `placingAnOrderWithSuccessfulPaymentCommitsOrderPaymentHistoryAndOutboxTogether`가 이번에 실패했다 - Phase 3 시점엔 Outbox "저장"까지만 있어서 항상 `published=false`였는데, Phase 5가 발행 단계를 추가하면서 그 단언이 틀린 게 됐다. `!event.published()`를 `event.published()`로 고쳤다 - 새 기능이 이전 Phase의 가정을 깨뜨린 사례를 실제로 겪은 것.
+
+## 9. 남은 Phase (TODO)
+
 - **Phase 6 — Boot**: 결제 클라이언트 AutoConfiguration, 알림 플러그인 Starter, 요청 관측 Starter(`spring-extensions/mini-observability-starter` 패턴 재사용).
 
 각 Phase는 이 저장소의 다른 프로젝트와 마찬가지로 "설계 → 확인 → 구현 → 테스트" 순으로 진행하고, 끝날 때마다 이 문서의 3번 절 표와 해당 Phase 절을 채운다.

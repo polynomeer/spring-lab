@@ -62,7 +62,7 @@ spring-internals-lab/
 | 30 | Mini Event Multicaster | 완료 | [`mini-spring/mini-event`](../../mini-spring/mini-event) |
 | 31 | SpringApplication Lifecycle Inspector | 기본 이벤트 순서/가용성만 완료 — 웹 서버 시작 시점 관찰은 자동 설정(18주차) 이후로 미룸 | [`experiments/spring-application-lifecycle`](../../experiments/spring-application-lifecycle) |
 | 32 | Custom AutoConfiguration | 완료 (`request-observation` 대신 `mini-observability-starter`로 명명) | [`spring-extensions/mini-observability-starter`](../../spring-extensions/mini-observability-starter) |
-| 종합 | Mini Order Platform (16번 절, 번호 없는 캡스톤) | 진행 중 — Phase 1(IoC + 빈 생명주기), Phase 2(AOP), Phase 3(트랜잭션), Phase 4(MVC) 완료, Phase 5~6(이벤트/Boot) 예정 | [`sample-app/mini-order-platform`](../../sample-app/mini-order-platform) / [`docs/24-mini-order-platform`](../24-mini-order-platform/mini-order-platform.md) |
+| 종합 | Mini Order Platform (16번 절, 번호 없는 캡스톤) | 진행 중 — Phase 1(IoC + 빈 생명주기), Phase 2(AOP), Phase 3(트랜잭션), Phase 4(MVC), Phase 5(이벤트) 완료, Phase 6(Boot) 예정 | [`sample-app/mini-order-platform`](../../sample-app/mini-order-platform) / [`docs/24-mini-order-platform`](../24-mini-order-platform/mini-order-platform.md) |
 
 번호 1~32는 전부 완료됐다 - 위 "종합" 행(Mini Order Platform)만 진행 중이다. 각 프로젝트의 분석 과정과 발견한 내용은 대응하는 `docs/<NN>-<topic>/` 문서에 있다 — [`01-roadmap.md`](./01-roadmap.md)의 진행 상황 표에서 링크를 따라간다.
 
