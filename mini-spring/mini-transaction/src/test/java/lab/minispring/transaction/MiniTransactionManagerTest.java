@@ -131,6 +131,54 @@ class MiniTransactionManagerTest {
         transactionManager.commit(outer);
     }
 
+    // 아래부터는 7번 절("남겨 둔 질문")이 미뤄 뒀던 NESTED를 나중에 채운 테스트들이다 -
+    // docs/14-transaction-propagation 후기 참고.
+
+    @Test
+    void beginNestedWithNoExistingTransactionBehavesLikeANewOwnedTransaction() {
+        // NESTED가 참여할 대상이 아예 없으면 REQUIRED처럼 그냥 새 트랜잭션을 시작한다 -
+        // savepoint를 찍을 "바깥 트랜잭션" 자체가 없기 때문이다.
+        JdbcMiniTransactionManager transactionManager = new JdbcMiniTransactionManager(dataSource);
+
+        MiniTransactionStatus status = transactionManager.begin(MiniPropagation.NESTED);
+
+        assertThat(status.isNewTransaction()).isTrue();
+
+        transactionManager.rollback(status);
+    }
+
+    @Test
+    void nestedTransactionSharesTheSameConnectionAsTheOuterOneUnlikeRequiresNew() {
+        JdbcMiniTransactionManager transactionManager = new JdbcMiniTransactionManager(dataSource);
+        MiniTransactionStatus outer = transactionManager.begin(MiniPropagation.REQUIRED);
+
+        MiniTransactionStatus inner = transactionManager.begin(MiniPropagation.NESTED);
+
+        // REQUIRES_NEW 테스트(requiresNewSuspendsTheExistingTransactionAndUsesAFreshConnection)와
+        // 정확히 대비되는 지점 - NESTED는 새 Connection을 얻지 않는다.
+        assertThat(inner.isNewTransaction()).isFalse();
+        assertThat(inner.getConnection()).isSameAs(outer.getConnection());
+
+        transactionManager.commit(inner);
+        transactionManager.commit(outer);
+    }
+
+    @Test
+    void nestedRollbackDoesNotMarkTheOuterTransactionRollbackOnlyUnlikeRequired() {
+        JdbcMiniTransactionManager transactionManager = new JdbcMiniTransactionManager(dataSource);
+        MiniTransactionStatus outer = transactionManager.begin(MiniPropagation.REQUIRED);
+        MiniTransactionStatus inner = transactionManager.begin(MiniPropagation.NESTED);
+
+        transactionManager.rollback(inner);
+
+        // REQUIRED 참여자였다면 이 rollback()이 holder를 rollback-only로 표시해서, 아래
+        // owner의 commit()이 MiniUnexpectedRollbackException을 던졌을 것이다
+        // (participantFailureMarksRollbackOnlySoOwnerCommitRollsBackAndThrows 참고).
+        // NESTED는 savepoint까지만 되돌리고 holder는 건드리지 않으므로, outer는 이 실패를
+        // 전혀 모른 채 정상적으로 commit()할 수 있다.
+        transactionManager.commit(outer); // 예외 없이 끝나야 한다
+    }
+
     @Test
     void interceptorCommitsASuccessfulTransferThroughTheFullProxy() throws SQLException {
         JdbcMiniTransactionManager transactionManager = new JdbcMiniTransactionManager(dataSource);
@@ -218,6 +266,31 @@ class MiniTransactionManagerTest {
 
         // REQUIRES_NEW로 커밋된 변경은 outer의 롤백과 무관하게 그대로 남는다.
         assertThat(readBalance(1)).isEqualTo(110);
+    }
+
+    @Test
+    void nestedParticipantFailureDoesNotPreventTheOwnerFromCommittingNormallyUnlikeRequired() throws SQLException {
+        // participantFailureMarksRollbackOnlySoOwnerCommitRollsBackAndThrows와 완전히 같은
+        // 시나리오(facade가 두 번째 이체의 실패를 삼킴)를, account 프록시의 전파 속성만
+        // REQUIRED -> NESTED로 바꿔서 재현한다 - 그것만으로 결과가 "예외 + 잔액 100 그대로"에서
+        // "예외 없음 + 잔액 110"으로 뒤바뀐다.
+        JdbcMiniTransactionManager transactionManager = new JdbcMiniTransactionManager(dataSource);
+        JdbcAccountRepository repository = new JdbcAccountRepository(transactionManager);
+        MiniProxyFactory accountFactory = new MiniProxyFactory(repository);
+        accountFactory.addInterceptor(new MiniTransactionInterceptor(transactionManager, MiniPropagation.NESTED));
+        Account account = accountFactory.getProxy();
+
+        AccountFacadeImpl facadeTarget = new AccountFacadeImpl(account);
+        MiniProxyFactory facadeFactory = new MiniProxyFactory(facadeTarget);
+        facadeFactory.addInterceptor(new MiniTransactionInterceptor(transactionManager, MiniPropagation.REQUIRED));
+        AccountFacade facade = facadeFactory.getProxy();
+
+        // 첫 번째 이체(+10)는 NESTED savepoint가 정상적으로 해제(release)되며 성공한다.
+        // 두 번째 이체(-1000)는 잔액 부족으로 실패해 savepoint까지만 롤백되지만, 그 실패는
+        // outer(facade 자신의 REQUIRED 트랜잭션)를 rollback-only로 오염시키지 않는다.
+        facade.transferTwiceSwallowingFailures(1, 10, -1000); // 예외 없이 정상 반환돼야 한다
+
+        assertThat(readBalance(1)).isEqualTo(110); // 첫 번째 이체만 반영됨
     }
 
     @Test

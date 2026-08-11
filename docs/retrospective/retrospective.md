@@ -2,7 +2,7 @@
 
 [`docs/plan/01-roadmap.md`](../plan/01-roadmap.md)가 요구하는 최종 산출물이다. 1주차(IoC와 BeanFactory)부터 16주차(컨트롤러 메서드 호출과 응답 변환)까지 핵심 8단계(IoC 컨테이너 → 빈 생명주기 → 확장점 → 컴포넌트 스캔/DI → AOP → 트랜잭션 → Spring MVC)를 마친 뒤, 선택 과정인 17~20주차(Spring Boot 내부 - `SpringApplication`, 자동 설정, 조건부 설정, Starter 직접 구현)까지 이어서 완주했다. 이 문서는 그 20개 문서를 가로지르는 반복된 패턴과 직접 부딪힌 버그들을 정리하는 데 집중한다. 개별 주차의 세부 내용은 각 문서를 참고한다.
 
-**후기**: 아래 0~7번 절은 20주차를 완주한 시점 그대로 남겨 뒀다 — 그 뒤로 21~23주차(애플리케이션 이벤트, MVC 예외 처리 우선순위, 트랜잭셔널 아웃박스)를 추가로 진행하고, `tools/learning-dashboard`(jdi-tracer 기반 시각화 도구, 7개 시나리오)를 만들고, 카탈로그에 남아 있던 마지막 두 프로젝트(4번 동적 빈 등록기, 11번 Plugin Auto Discovery)까지 마치면서 [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md)의 32개 프로젝트가 전부 완료됐다. 그 경과는 [8번 절](#8-20주-이후--카탈로그-32개-프로젝트-완주와-학습-대시보드)에 정리했다 — 특히 7번 절("남겨 둔 질문")이 "여전히 미착수"라고 적어 둔 항목들은 지금은 전부 끝났다는 것만 미리 밝혀 둔다. 그리고 그 32개 다음으로, 카탈로그가 번호를 매기지 않고 별도 절(16번 절 "종합 프로젝트 추천")로 남겨 뒀던 캡스톤 `Mini Order Platform`(IoC부터 Boot까지 6개 Phase를 하나의 애플리케이션으로 통합)까지 완주했다 — [9번 절](#9-32개-다음--mini-order-platform-캡스톤-완주)에 정리했다. 그 캡스톤이 끝난 뒤에는 카탈로그 범위를 완전히 벗어난 확장으로 상품(Product) 도메인을 추가했다 — [10번 절](#10-mini-order-platform-다음--상품-도메인-추가)에 정리했다. 그 다음엔 7번 절("남겨 둔 질문")로 되돌아가 그중 하나(CGLIB 상당 서브클래스 프록시)를 실제로 채웠다 — [11번 절](#11-남겨-둔-질문으로-되돌아가기--cglib-상당-서브클래스-프록시)에 정리했다.
+**후기**: 아래 0~7번 절은 20주차를 완주한 시점 그대로 남겨 뒀다 — 그 뒤로 21~23주차(애플리케이션 이벤트, MVC 예외 처리 우선순위, 트랜잭셔널 아웃박스)를 추가로 진행하고, `tools/learning-dashboard`(jdi-tracer 기반 시각화 도구, 7개 시나리오)를 만들고, 카탈로그에 남아 있던 마지막 두 프로젝트(4번 동적 빈 등록기, 11번 Plugin Auto Discovery)까지 마치면서 [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md)의 32개 프로젝트가 전부 완료됐다. 그 경과는 [8번 절](#8-20주-이후--카탈로그-32개-프로젝트-완주와-학습-대시보드)에 정리했다 — 특히 7번 절("남겨 둔 질문")이 "여전히 미착수"라고 적어 둔 항목들은 지금은 전부 끝났다는 것만 미리 밝혀 둔다. 그리고 그 32개 다음으로, 카탈로그가 번호를 매기지 않고 별도 절(16번 절 "종합 프로젝트 추천")로 남겨 뒀던 캡스톤 `Mini Order Platform`(IoC부터 Boot까지 6개 Phase를 하나의 애플리케이션으로 통합)까지 완주했다 — [9번 절](#9-32개-다음--mini-order-platform-캡스톤-완주)에 정리했다. 그 캡스톤이 끝난 뒤에는 카탈로그 범위를 완전히 벗어난 확장으로 상품(Product) 도메인을 추가했다 — [10번 절](#10-mini-order-platform-다음--상품-도메인-추가)에 정리했다. 그 다음엔 7번 절("남겨 둔 질문")로 되돌아가 그중 하나(CGLIB 상당 서브클래스 프록시)를 실제로 채웠고 — [11번 절](#11-남겨-둔-질문으로-되돌아가기--cglib-상당-서브클래스-프록시) — 곧이어 같은 목록의 다음 항목(mini-transaction의 NESTED 전파)도 채웠다 — [12번 절](#12-남겨-둔-질문-두-번째--mini-transaction의-nested-전파)에 정리했다.
 
 ## 0. 숫자로 보는 20주
 
@@ -162,7 +162,7 @@ mini-webmvc (15~16주차, project 27)
 의도적으로 범위 밖에 둔 것들(각 문서 10번 절에 기록됨) 중 특히 다시 다뤄볼 만한 것:
 
 **핵심 16주에서**
-- mini 구현들의 일관된 생략: JSON 실제 역직렬화(mini-webmvc), ~~CGLIB 상당 서브클래스 프록시(mini-aop)~~, NESTED 전파(mini-transaction), `@ControllerAdvice` 전역 예외 처리(mini-webmvc) - 전부 "핵심 메커니즘을 이해하는 데는 필요 없었던" 것들이다. CGLIB 상당 서브클래스 프록시는 11번 절에 적었듯 이후에 마쳤다 - 나머지 세 개는 여전히 미착수다.
+- mini 구현들의 일관된 생략: JSON 실제 역직렬화(mini-webmvc), ~~CGLIB 상당 서브클래스 프록시(mini-aop)~~, ~~NESTED 전파(mini-transaction)~~, `@ControllerAdvice` 전역 예외 처리(mini-webmvc) - 전부 "핵심 메커니즘을 이해하는 데는 필요 없었던" 것들이다. CGLIB 상당 서브클래스 프록시는 11번 절, NESTED 전파는 12번 절에 적었듯 이후에 마쳤다 - 나머지 두 개는 여전히 미착수다.
 - 7주차에서 남긴 ASM 기반 컴포넌트 스캔의 실제 성능/안전성 비교는 시도하지 않았다.
 - 16주차에서 발견한 mini-webmvc의 인자 리졸버 캐싱 부재는 정확성에는 영향 없지만 실제라면 성능 이슈가 됐을 것이다.
 
@@ -262,3 +262,13 @@ Phase 1~5는 각자 새 개념 하나씩을 새 코드로 검증하는 식이라
 **Objenesis 없이 만들면, 그 차이가 오히려 더 잘 보인다.** 실제 Spring의 `ObjenesisCglibAopProxy`는 생성자를 건너뛰어 프록시 인스턴스의 필드를 전부 비워 둔다 - 이 축소 구현은 그 라이브러리를 추가하지 않고 그냥 진짜 생성자를 호출했다. 그 결과 "target과 분리된 필드를 가진 서브클래스"라는 같은 결론에 두 가지 다른 경로로 도달했다: Spring은 "완전히 빈 상태"로, 이 축소 구현은 "생성자가 만든, target과는 다른 초기 상태"로. `final` 메서드(오버라이드가 안 돼 인터셉터를 못 거치는)를 호출해서 그 차이를 직접 관찰하는 테스트(`finalMethodsAreNotInterceptedAndSeeTheProxysOwnStateNotTheTargets`)를 짜 보고서야, "왜 Spring은 굳이 Objenesis라는 별도 라이브러리까지 끌어와 생성자를 피하는가"라는 질문에 스스로 답할 수 있었다 - 생성자를 그대로 두면 어차피 "비어 있지 않은, 하지만 target과는 다른" 상태가 생기고, 그 상태가 우연히 뭔가를 초기화해 버리면(로그, 외부 자원 연결 등) 프록시를 만들기만 해도 예상 못 한 부수효과가 생길 수 있다는 것 - 완전히 비우는 쪽이 오히려 더 안전한 선택이었다.
 
 이 모듈의 테스트는 7개에서 11개로 늘었고, 저장소 전체 자동화 테스트는 10번 절의 337개에서(그사이 진행한 상품 재고 동시성 검증 3개를 더해) 344개가 됐다.
+
+## 12. 남겨 둔 질문 두 번째 — mini-transaction의 NESTED 전파
+
+7번 절 목록의 두 번째 항목을 채웠다: `mini-spring/mini-transaction`의 `JdbcMiniTransactionManager`에 `NESTED` 전파(savepoint 기반)를 추가했다. 상세 내용은 [`docs/14-transaction-propagation/transaction-propagation.md`](../14-transaction-propagation/transaction-propagation.md)의 후기(8·10·11·12번 절)에 반영했다 - 이 절은 그중 반복해서 배울 만한 것만 추린다.
+
+**좁은 인터페이스가 그대로 값어치를 냈다.** `MiniTransactionManager`는 `begin()`/`commit()`/`rollback()` 딱 세 메서드뿐이고, `MiniTransactionInterceptor`는 그 세 메서드만 호출한다. `NESTED`를 추가하면서 `MiniTransactionInterceptor`는 정말로 한 줄도 바뀌지 않았다 - `begin()`이 REQUIRED/REQUIRES_NEW/NESTED 각각 다른 내부 메커니즘(ThreadLocal 참여, 별도 Connection, savepoint)으로 만들어 낸 `MiniTransactionStatus`를 그냥 그대로 넘겨받아 `commit()`/`rollback()`에 되돌려줄 뿐이었다. mini-aop(11번 절)에서 인터셉터 체인이 재사용됐던 것과 같은 종류의 확인이다 - "확장점을 좁게 쪼갠다"는 패턴이 새 기능을 추가할 때 정확히 어떤 형태로 값어치를 내는지(기존 코드를 안 건드려도 된다는 것) 이번에도 코드로 확인했다.
+
+**`REQUIRED`와 `NESTED`는 정반대 결정을 한 곳에서 내린다.** `JdbcMiniTransactionManager.rollback()`은 참여자의 실패를 처리하는 메서드 하나인데, 그 안에서 `REQUIRED` 참여자는 반드시 `holder.markRollbackOnly()`를 호출해야 하고 `NESTED` 참여자는 반드시 호출하면 안 된다 - 같은 실패를 owner에게 "반드시 알려야 하는 것"과 "알리면 안 되는 것"으로 정반대로 다룬다. 이미 있던 `participantFailureMarksRollbackOnlySoOwnerCommitRollsBackAndThrows` 테스트와 정확히 같은 시나리오(facade가 두 번째 이체 실패를 삼킴)를 전파 속성만 바꿔 다시 돌려서(`nestedParticipantFailureDoesNotPreventTheOwnerFromCommittingNormallyUnlikeRequired`) - 결과가 "예외 + 잔액 원상복구"에서 "예외 없음 + 첫 이체만 반영"으로 뒤집히는 걸 직접 확인했다.
+
+저장소 전체 자동화 테스트는 344개에서 348개가 됐다.

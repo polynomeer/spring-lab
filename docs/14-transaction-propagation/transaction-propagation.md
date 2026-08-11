@@ -2,6 +2,8 @@
 
 [`docs/plan/01-roadmap.md`](../plan/01-roadmap.md) 14주차, [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md) 프로젝트 21(Transaction Propagation Playground)·프로젝트 22(Mini Transaction Manager, 3~6단계)에 대응하는 분석 문서다.
 
+**후기**: 10번 절은 원래 "`NESTED`(savepoint)가 없다"를 의도적 생략으로 남겨 뒀었다(`docs/retrospective/retrospective.md` 7번 절 "남겨 둔 질문"). 카탈로그 32개 프로젝트 + Mini Order Platform 캡스톤을 전부 마친 뒤(그리고 mini-aop의 CGLIB 상당 서브클래스 프록시를 채운 뒤) 그 생략도 채웠다 - `mini-spring/mini-transaction`에 `JdbcMiniTransactionManager`의 `NESTED` 분기를 추가했다. 8·10·11·12번 절에 그 내용을 반영했다.
+
 ## 1. 이번 질문
 
 - JDBC `Connection`은 어떻게 현재 스레드에 묶이는가? 같은 트랜잭션 안에서 여러 번 DB 접근을 해도 항상 같은 `Connection`이 쓰이는 이유는?
@@ -151,7 +153,7 @@ org.springframework.transaction.support.AbstractPlatformTransactionManager#getTr
 | `REQUIRES_NEW` 성공 후 외부가 나중에 실패 | `order`는 롤백, 이미 독립적으로 커밋된 `payment`는 그대로 남음 |
 | `NOT_SUPPORTED`에서 결제 자체가 실패 | `order`는 롤백되지만, 트랜잭션이 아예 없었던 `payment` 기록은 **그대로 남음** |
 
-[`MiniTransactionManagerTest`](../../mini-spring/mini-transaction/src/test/java/lab/minispring/transaction/MiniTransactionManagerTest.java) (12개, 3~6단계 관련 5개 추가):
+[`MiniTransactionManagerTest`](../../mini-spring/mini-transaction/src/test/java/lab/minispring/transaction/MiniTransactionManagerTest.java) (16개, 3~6단계 관련 5개 + 후기에서 추가한 NESTED 4개):
 
 | 실험 | 결과 |
 | --- | --- |
@@ -161,6 +163,10 @@ org.springframework.transaction.support.AbstractPlatformTransactionManager#getTr
 | 참여자 실패 후 owner가 그 예외를 **삼킴** | `MiniUnexpectedRollbackException` - rollback-only 전파(5단계)가 없었다면 조용히 커밋됐을 상황 |
 | `REQUIRES_NEW`로 커밋된 변경 + 이후 외부 트랜잭션 롤백 | `REQUIRES_NEW` 쪽 변경은 그대로 남음 |
 | Synchronization 콜백(commit/rollback) | 등록한 순서대로 `beforeCommit`→`afterCommit`, 또는 `afterRollback`이 정확히 호출됨 |
+| (후기) `NESTED`로 `begin()`, 기존 트랜잭션 없음 | `REQUIRED`처럼 그냥 새 트랜잭션의 owner가 됨 - savepoint를 찍을 대상 자체가 없다 |
+| (후기) `REQUIRED` 안에서 `NESTED`로 `begin()` | `REQUIRES_NEW`와 정반대로 기존 트랜잭션과 **같은** `Connection`, `isNewTransaction()=false` |
+| (후기) `NESTED` `rollback()` | savepoint까지만 되돌리고, `REQUIRED` 참여자의 `rollback()`과 달리 `holder`를 rollback-only로 표시하지 않음 - 그래서 owner의 `commit()`이 예외 없이 정상적으로 끝남 |
+| (후기) 참여자 실패를 owner가 삼킴, 단 전파가 `REQUIRED`가 아니라 `NESTED` | `participantFailureMarksRollbackOnlySoOwnerCommitRollsBackAndThrows`(위 4번째 행)와 **완전히 같은 시나리오**인데 결과가 정반대 - 예외 없이 정상 반환, 첫 번째 이체만 반영(잔액 110) |
 
 **직접 겪은 버그** (5번에서 예상했던 것): `MiniTransactionInterceptor`가 `commit()`을 `proceed()`를 감싸는 `try` **안에** 두고 있었다. rollback-only 전파를 구현해서 `commit()`이 `MiniUnexpectedRollbackException`을 던질 수 있게 되자, 그 예외가 같은 `catch (Throwable ex)`에 잡혀서 **이미 커넥션이 닫힌 트랜잭션에 또 `rollback()`을 시도**하다가 "connection is closed" 오류가 났다. 실제 Spring의 `TransactionAspectSupport.invokeWithinTransaction()` 소스를 다시 확인해 보니, `commitTransactionAfterReturning(txInfo)` 호출이 `proceed()`를 감싸는 `try`/`catch`/`finally` **바깥**에 있었다 — 그 구조를 그대로 따라서 `commit()` 호출을 `try` 밖으로 옮겨 해결했다.
 
@@ -181,9 +187,10 @@ org.springframework.transaction.support.AbstractPlatformTransactionManager#getTr
 - `MiniConnectionHolder`: 커넥션 + `rollbackOnly` 플래그 + `Synchronization` 콜백 목록 - 실제 `ConnectionHolder`의 축소판
 - rollback-only 전파: 참여자의 `rollback()`이 이제 실제로 `holder.markRollbackOnly()`를 호출하고, owner의 `commit()`이 이를 확인해 필요하면 실제 롤백 + `MiniUnexpectedRollbackException`
 - `registerSynchronization()`: 스레드에 바인딩된 현재 트랜잭션에 콜백을 등록(실제 `TransactionSynchronizationManager.registerSynchronization()`에 대응, 단 별도 클래스로 분리하지 않고 트랜잭션 매니저에 포함)
+- **(후기에서 추가) `begin(NESTED)`**: 기존 트랜잭션이 있으면 `Connection#setSavepoint()`로 그 위에 savepoint 하나를 찍고(새 `Connection`을 얻지 않는다), 기존 트랜잭션이 없으면 `REQUIRED`처럼 그냥 새 트랜잭션을 시작한다. `commit()`은 savepoint를 해제(`releaseSavepoint`)할 뿐 실제 커밋은 하지 않고, `rollback()`은 그 savepoint까지만 되돌리며 — 여기가 `REQUIRED` 참여자와 결정적으로 다른 지점인데 — `holder.markRollbackOnly()`를 호출하지 않는다. `MiniTransactionInterceptor`는 한 줄도 바꾸지 않았다 - `begin()`/`commit()`/`rollback()`을 propagation과 무관하게 그대로 호출하는 구조라, savepoint 관련 분기는 전부 `JdbcMiniTransactionManager` 내부에만 있으면 충분했다.
 
 **생략한 것 (의도적)**
-- **`NESTED`(savepoint)가 없다** — mini가 다루는 것은 REQUIRED/REQUIRES_NEW까지다(카탈로그 발전 단계 원문 그대로). savepoint는 JDBC API 자체(`Connection#setSavepoint`)를 다루는 별도의 학습 주제라 이번 범위 밖으로 뒀다.
+- **`NESTED` 안에 `NESTED`를 중첩하는 경우를 테스트하지 않았다** — 구현 자체는 "현재 스레드에 바인딩된 Connection 위에 savepoint를 하나 더 찍는다"는 재귀적으로 자연스러운 동작이라 여러 단계가 구조적으로 막혀 있지는 않지만(매번 그 시점의 `existing.getConnection()`을 보고 판단하므로), 실제로 두 단계 이상을 검증하는 테스트는 짜지 않았다 - 카탈로그가 요구한 "REQUIRED 안에서 NESTED 하나"라는 시나리오만 확인했다.
 - **여러 `DataSource`를 지원하지 않는다** — 실제 `TransactionSynchronizationManager`는 `Map<Object, Object> resources`로 여러 자원(여러 `DataSource`, JMS 등)을 동시에 스레드에 바인딩할 수 있지만, mini의 `holderThreadLocal`은 `JdbcMiniTransactionManager` 인스턴스 하나당 `DataSource` 하나만 다룬다.
 - **격리 수준(`isolationLevel`)/트랜잭션 이름은 suspend/resume 대상에 없다** — 실제 `SuspendedResourcesHolder`는 이런 부가 정보까지 함께 들고 있다가 복원하지만, mini는 커넥션과 rollback-only 관련 상태만 다룬다.
 
@@ -192,6 +199,7 @@ org.springframework.transaction.support.AbstractPlatformTransactionManager#getTr
 - **왜 `TransactionSynchronizationManager`는 `PlatformTransactionManager`와 분리된 별도의 정적 클래스인가**: "현재 스레드에 어떤 자원이 묶여 있는가"는 트랜잭션 매니저 하나의 관심사가 아니다 — `JdbcTemplate`, `HibernateTemplate` 등 트랜잭션과 무관해 보이는 코드도 "지금 트랜잭션 안에 있다면 그 커넥션을 재사용해야 한다"는 사실을 알아야 한다. 이 지식을 트랜잭션 매니저 구현체 하나에 가두지 않고 스레드 전역의 정적 레지스트리로 분리해 둔 덕에, 트랜잭션 관리와 무관한 코드도 `DataSourceUtils.getConnection()` 하나만 호출하면 "지금 트랜잭션이 있으면 참여하고, 없으면 새로 연다"는 동작을 얻는다.
 - **왜 `REQUIRES_NEW`는 기존 트랜잭션을 "종료"가 아니라 "suspend"시키는가**: `REQUIRES_NEW`가 끝난 뒤에도 바깥 트랜잭션은 자신이 이미 해 온 작업(같은 커넥션 위의 이전 변경들)을 계속 이어가야 한다. 만약 suspend 없이 그냥 새 트랜잭션을 얹기만 한다면, 바깥 트랜잭션의 상태(현재 트랜잭션 이름, 격리 수준, readOnly 여부, 이미 등록된 Synchronization 콜백들)가 안쪽 트랜잭션의 그것과 섞여 버릴 위험이 있다 — suspend/resume은 "완전히 다른 트랜잭션 컨텍스트로 잠깐 갈아탔다가 원래 컨텍스트로 정확히 돌아온다"는 것을 보장하기 위한 장치다.
 - **왜 `NESTED`는 별도 커넥션 없이 savepoint로 구현되는가**: `NESTED`가 표현하려는 의미는 "바깥 트랜잭션의 일부지만, 이 부분만 따로 취소할 수 있다"는 것이다. 이는 물리적으로 트랜잭션을 통째로 분리하는 것(REQUIRES_NEW)과는 다른 요구사항 — 같은 커넥션, 같은 트랜잭션 경계 안에서 "부분 취소"만 가능하면 되므로, JDBC가 이미 제공하는 savepoint 메커니즘을 그대로 재사용하는 것이 가장 자연스러운 구현이다. 이 선택 덕분에 `NESTED` 실패는 savepoint 이전 상태로만 되돌리고, 바깥 트랜잭션은 그 사실조차 모른 채(rollback-only로 오염되지 않고) 계속 진행할 수 있다.
+- **(후기에서 추가) 이 설계 의도를 mini 구현에서 코드로 확인하면**: `rollback-only 전파`(5단계, 이 문서가 처음 마무리될 때 구현한 것)와 `NESTED`(후기에서 추가한 것)는 "참여자가 실패했을 때 owner에게 무엇을 알릴 것인가"라는 같은 질문에 정반대로 답한다 - `REQUIRED` 참여자의 `rollback()`은 반드시 `holder.markRollbackOnly()`를 호출해야 하고(그래야 5단계가 존재하는 이유가 성립한다), `NESTED`의 `rollback()`은 반드시 그 호출을 **하지 않아야** 한다. 같은 `JdbcMiniTransactionManager.rollback()` 메서드 안에 이 두 갈래가 나란히 있는 걸 보면, "참여"라는 한 단어로 뭉뚱그려지는 전파 속성들이 사실은 "실패를 얼마나 넓은 범위로 알릴 것인가"라는 축 위에서 서로 다른 지점을 고른 것뿐이라는 게 코드로 드러난다.
 - **왜 mini의 `commit()`을 `try` 밖으로 옮기는 게 "사소한 리팩터링"이 아니라 "구조적으로 필요한 것"인가**: `commit()`이 실패할 수 있다는 것(rollback-only로 인한 `UnexpectedRollbackException`)을 받아들이면, "무엇이 실행 실패이고 무엇이 커밋 실패인가"를 구분해야 한다 — 실행이 성공했는데 커밋이 실패한 경우, 이미 완료된(닫힌) 트랜잭션에 대해 "실행 실패니까 롤백해야지"라고 다시 개입하면 안 된다. 실제 Spring이 `commitTransactionAfterReturning`을 별도의, 독립된 호출로 분리해 둔 것은 바로 이 두 실패 모드(실행 실패 vs 커밋 실패)를 프레임워크 차원에서 명확히 나누기 위한 설계다.
 
 ## 12. 결론 (예상과 실제의 차이)
@@ -200,3 +208,4 @@ org.springframework.transaction.support.AbstractPlatformTransactionManager#getTr
 - 예상 밖이었던 것: `NOT_SUPPORTED`로 실행된 코드는 그 어떤 트랜잭션에도 속하지 않아서, 나중에 무슨 일이 있어도(바깥 트랜잭션 롤백은 물론, 그 코드 자신이 실패해도) 절대 되돌릴 수 없다는 것 — "트랜잭션 없음"이 "위험하지 않음"을 뜻하지 않는다는 걸 직접 확인했다.
 - Mini 구현이 보여준 것(가장 값진 발견): rollback-only 전파를 "제대로" 구현하려고 하자, 이전에는 드러나지 않았던 구조적 버그(`commit()`을 `proceed()`의 `catch` 안에 둔 것)가 즉시 실패로 나타났다 — 13주차에 "우연히 안전했다"고 적었던 그 지점이, 실제로 안전 장치를 추가하는 순간 오히려 새로운 실패 모드를 만들어 낸 것이다. 이는 "얕은 유사 구현은 겉보기엔 통과하지만, 실제 정책(rollback-only)을 하나씩 추가할 때마다 숨어 있던 구조적 가정이 검증된다"는 이 문서 전체의 방법론(공식 문서 → 최소 예제 → ... → 축소 구현)이 의도한 바로 그 학습 효과다.
 - 6단계(Spring AOP)에 이어 7단계(트랜잭션)도 이걸로 마무리된다. 다음은 8단계, Spring MVC(`DispatcherServlet`)로 넘어간다.
+- **(후기에서 추가)** `MiniTransactionInterceptor`가 정말로 propagation에 무관하게 짜여 있었다는 걸 이번에 실제로 확인했다 - `NESTED`를 추가하면서 그 클래스는 단 한 줄도 바꾸지 않았다(10번 절). `begin()`/`commit()`/`rollback()`이라는 세 개의 추상 동작 뒤에 REQUIRED/REQUIRES_NEW/NESTED 각각의 실제 메커니즘(ThreadLocal 참여, 별도 Connection, savepoint)을 전부 숨길 수 있었던 건 우연이 아니라, `MiniTransactionManager` 인터페이스를 원래부터 그렇게 좁게(딱 세 메서드로) 설계해 뒀기 때문이다 - `docs/retrospective/retrospective.md` 2번 절("20주에 걸쳐 반복된 설계 패턴")이 뽑아낸 "확장점은 좁고 합성 가능하게 쪼갠다"는 결론이 이 문서 하나 안에서도 그대로 재확인된 셈이다.
