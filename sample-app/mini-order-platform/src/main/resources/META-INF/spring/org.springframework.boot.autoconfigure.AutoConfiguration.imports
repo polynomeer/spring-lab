@@ -1,0 +1,2 @@
+lab.sampleapp.orderplatform.boot.PaymentGatewayAutoConfiguration
+lab.sampleapp.orderplatform.boot.NotificationAutoConfiguration

@@ -2,7 +2,6 @@ package lab.sampleapp.orderplatform.payment;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import org.springframework.stereotype.Component;
 
 import lab.sampleapp.orderplatform.aop.TransientOperationException;
 
@@ -11,12 +10,31 @@ import lab.sampleapp.orderplatform.aop.TransientOperationException;
  * 핸드셰이크를 수행하고(@PostConstruct), 컨텍스트를 닫을 때 연결을 해제한다(@PreDestroy).
  * {@link CardPaymentGateway}가 이 클라이언트에 의존하므로, 초기화 순서상 이 빈이 먼저
  * connect()를 마쳐야 카드 결제가 가능하다.
+ *
+ * <p>Phase 1에서는 여기 {@code @Component}가 붙어 있었다 - Phase 6에서
+ * {@code lab.sampleapp.orderplatform.boot.PaymentGatewayAutoConfiguration}으로 등록
+ * 방식을 옮기면서 뗐다. @PostConstruct/@PreDestroy 콜백은 등록 방식과 무관하게 여전히
+ * 호출된다(CommonAnnotationBeanPostProcessor는 빈이 컴포넌트 스캔으로 왔는지 @Bean
+ * 메서드로 왔는지 신경 쓰지 않는다 - Phase 1의 PluginRegistrationBeanPostProcessor에서
+ * 이미 확인한 것과 같은 성질).
  */
-@Component
 public class PaymentGatewayClient {
 
     private boolean connected;
     private int failNextPings;
+    private final int connectTimeoutSeconds;
+
+    public PaymentGatewayClient() {
+        this(5);
+    }
+
+    public PaymentGatewayClient(int connectTimeoutSeconds) {
+        this.connectTimeoutSeconds = connectTimeoutSeconds;
+    }
+
+    public int connectTimeoutSeconds() {
+        return connectTimeoutSeconds;
+    }
 
     @PostConstruct
     void connect() {

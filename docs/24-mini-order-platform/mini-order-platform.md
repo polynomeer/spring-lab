@@ -34,7 +34,9 @@ sample-app/mini-order-platform/
                   OrderExceptionHandlers, OrderController/PaymentController, OrderWebConfig(@EnableWebMvc)
     event/      - OrderCompletedEvent, NotificationDispatchListener/OutboxPublishListener(AFTER_COMMIT),
                   OrderOutboxPublisher, OrderEventBroker/FakeOrderEventBroker
-    OrderPlatformConfig.java - Phase 1~3, 5용 진입점(web 패키지만 스캔에서 제외)
+    boot/       - PaymentGatewayAutoConfiguration/NotificationAutoConfiguration(+Properties),
+                  OrderPlatformApplication(@EnableAutoConfiguration 진입점)
+    OrderPlatformConfig.java - Phase 1~3, 5용 진입점(web + OrderPlatformApplication 제외)
 ```
 
 ## 3. 학습 요소 → 구현 매핑
@@ -64,7 +66,9 @@ sample-app/mini-order-platform/
 | 이벤트 | 알림 발송 | ✅ Phase 5 | `NotificationDispatchListener` |
 | 이벤트 | Outbox 발행 | ✅ Phase 5 | `OrderOutboxPublisher`/`OutboxPublishListener` |
 | 이벤트 | 트랜잭션 커밋 이후 처리 | ✅ Phase 5 | `@TransactionalEventListener(phase = AFTER_COMMIT)` |
-| Boot | 결제 클라이언트 AutoConfiguration / 알림 Starter / 요청 관측 Starter | ⬜ Phase 6 | - |
+| Boot | 결제 클라이언트 AutoConfiguration | ✅ Phase 6 | `PaymentGatewayAutoConfiguration` |
+| Boot | 알림 플러그인 Starter | ✅ Phase 6 | `NotificationAutoConfiguration` |
+| Boot | 요청 관측 Starter | ✅ Phase 6 | `spring-extensions/mini-observability-starter` 재사용 |
 
 ## 4. Phase 1 — IoC + 빈 생명주기
 
@@ -258,8 +262,50 @@ Outbox 행 저장(`outboxRepository.save(...)`)은 여전히 Phase 3처럼 `plac
 
 **기존 테스트 업데이트**: Phase 3에서 작성한 `OrderPlacementServiceTest`의 `placingAnOrderWithSuccessfulPaymentCommitsOrderPaymentHistoryAndOutboxTogether`가 이번에 실패했다 - Phase 3 시점엔 Outbox "저장"까지만 있어서 항상 `published=false`였는데, Phase 5가 발행 단계를 추가하면서 그 단언이 틀린 게 됐다. `!event.published()`를 `event.published()`로 고쳤다 - 새 기능이 이전 Phase의 가정을 깨뜨린 사례를 실제로 겪은 것.
 
-## 9. 남은 Phase (TODO)
+## 9. Phase 6 — Boot (마지막 Phase)
 
-- **Phase 6 — Boot**: 결제 클라이언트 AutoConfiguration, 알림 플러그인 Starter, 요청 관측 Starter(`spring-extensions/mini-observability-starter` 패턴 재사용).
+Phase 1의 `PaymentGatewayClient`와 `NotificationDispatcher`에서 `@Component`를 떼고, Boot 스타일 `@AutoConfiguration` + `@ConfigurationProperties`로 등록 방식을 옮겼다. 그리고 이 모듈을 실제로 `SpringApplication`으로 띄울 수 있는 `OrderPlatformApplication`을 추가해서, 손댄 적 없는 `spring-extensions/mini-observability-starter`의 요청 관측 인터셉터가 우리 MVC 파이프라인에 자동으로 꽂히는 것까지 실제 HTTP 요청으로 검증했다.
 
-각 Phase는 이 저장소의 다른 프로젝트와 마찬가지로 "설계 → 확인 → 구현 → 테스트" 순으로 진행하고, 끝날 때마다 이 문서의 3번 절 표와 해당 Phase 절을 채운다.
+### 9.1 왜 `@ConditionalOnBean`을 쓰지 않았는가
+
+`NotificationAutoConfiguration`을 설계할 때 처음 든 생각은 "채널이 하나도 없으면 Dispatcher도 만들지 말자"는 의미로 `@ConditionalOnBean(NotificationChannel.class)`를 쓰는 것이었다. 하지만 Boot 공식 문서가 명시적으로 경고하는 함정이 있다 - `@ConditionalOnBean`은 대상 자동 설정이 `AutoConfigurationImportSelector`의 지연(deferred) 처리 경로를 거칠 때만 순서가 보장되고, 이 모듈처럼 컴포넌트 스캔이나 평범한 `@Import`로 가져오면 다른 설정 클래스가 아직 다 처리되지 않은 시점에 조건이 평가될 수 있다. 그래서 대신 `List<NotificationChannel>`을 `@Bean` 팩토리 메서드의 파라미터로 받는 방식을 썼다 - 조건 평가 시점이 아니라 실제 빈 생성 시점에 해석되므로 순서에 영향받지 않는다(0개여도 빈 리스트가 주입될 뿐 실패하지 않는다). `channelsDeclaredByUserConfigurationAreInjectedRegardlessOfImportOrder` 테스트가 이 선택이 실제로 안전하다는 것까지 확인한다.
+
+### 9.2 직접 겪은 가장 큰 함정 — 컴포넌트 스캔에 우연히 휩쓸린 `@EnableAutoConfiguration`
+
+`OrderPlatformApplication`(진입점, `@EnableAutoConfiguration`)을 다른 Boot 관련 클래스들과 같은 `boot` 패키지에 뒀다. 그런데 `OrderPlatformConfig`/`OrderWebConfig` 둘 다 `"lab.sampleapp.orderplatform"` 전체를 컴포넌트 스캔하고 있었다 - `boot` 패키지도 예외가 아니었다. 그 결과, Phase 1~5의 순수 `AnnotationConfigApplicationContext` 테스트들이 `OrderPlatformApplication` 자신을 평범한 `@Configuration` 후보로 주워 담아 버렸고, 그 클래스에 붙은 `@EnableAutoConfiguration`은 **컴포넌트 스캔으로 "발견되기만 해도" 그대로 활성화**됐다 - Spring Boot의 표준 `DataSourceAutoConfiguration`, `SqlInitializationAutoConfiguration` 등 전부가 이 순수 테스트 컨텍스트 안으로 끌려들어와서, `JdbcConfig`가 `EmbeddedDatabaseBuilder#addScript()`로 이미 실행해 둔 `schema.sql`을 Boot가 또 한 번 실행하려다가 "테이블이 이미 있다"는 오류로 깨졌다.
+
+증상 자체는 낯익었다 - Phase 4에서 이미 겪은 "H2 `testdb` 기본 이름 충돌"과 똑같은 오류 메시지였다. 그래서 처음엔 또 `@AfterEach`에서 `context.close()`를 빼먹은 줄 알았는데, 이번엔 **매 테스트가 첫 실행부터** 실패하고 있었다 - 즉 컨텍스트 간 누수가 아니라 **단일 컨텍스트 안에서 같은 스키마가 두 번** 실행되고 있다는 신호였다. `getBeanDefinitionNames()`로 실패한 컨텍스트의 빈 정의를 직접 덤프해 보고서야 `org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration`, `org.springframework.boot.autoconfigure.sql.init.SqlInitializationAutoConfiguration` 같은 Boot 표준 클래스들이 버젓이 등록돼 있는 걸 확인했다 - `OrderPlatformConfig`에는 `@EnableAutoConfiguration`이 전혀 없는데도.
+
+**교훈**: `@SpringBootApplication`/`@EnableAutoConfiguration`이 붙은 진입점 클래스는 자신이 루트가 되는 스캔에만 등장해야 한다 - 다른 목적의(특히 그 진입점을 몰라도 되는) 컴포넌트 스캔에 우연히 휩쓸리면, 그 스캔이 의도하지 않았던 Boot의 전체 자동 설정 표면을 통째로 활성화시켜 버린다. 고친 방법은 `OrderPlatformConfig`/`OrderWebConfig` 양쪽의 `@ComponentScan`에 `excludeFilters`로 `OrderPlatformApplication.class`를 `ASSIGNABLE_TYPE`으로 명시적으로 제외하는 것이었다.
+
+### 9.3 두 번째로 겪은 함정 — 테스트 픽스처도 같은 스캔에 휩쓸린다
+
+위 문제를 고친 뒤에도 실패가 남아 있었다: `MiniOrderPlatformIoCLifecycleTest`의 `PluginCatalog`에 존재해서는 안 될 `"fakeChannel"` 항목이 나타났고, `NotificationDispatcher`가 채널을 하나도 못 찾는 테스트도 있었다. 원인은 같은 종류의 실수였다 - project 32의 `RequestObservationAutoConfigurationTest`를 그대로 따라 `withUserConfiguration(UserDispatcherConfig.class)`처럼 **중첩 `@Configuration` 테스트 픽스처 클래스**를 만들었는데, 그 테스트 클래스 자신이 `lab.sampleapp.orderplatform.boot` 패키지(스캔 대상 트리 안)에 있었다 - project 32에서는 그 테스트가 독립된 다른 모듈/패키지에 있어서 전혀 문제가 없었지만, 이 모듈은 자기 자신의 테스트 소스셋이 프로덕션 스캔 루트와 같은 패키지 트리를 공유한다. `OutboxSampleConfig`(23주차)가 진작에 "패키지 전체를 스캔하면 테스트 소스셋의 헬퍼 클래스까지 함께 주워 담을 위험이 있다"고 남겨 둔 경고를 이번에 직접 재현한 셈이다.
+
+고친 방법: 새 스캔 가능한 클래스를 만드는 `withUserConfiguration(...)` 대신, `ApplicationContextRunner#withBean(Class, Supplier)`로 빈을 직접 등록했다 - 컴포넌트 스캔이 절대 발견할 수 없는, 익명의 인메모리 빈 등록이라 이 위험 자체가 원천적으로 없다.
+
+### 9.4 세 번째 함정 — 진짜 Boot 부트스트랩에서는 스키마 초기화가 실제로 두 번 겹친다
+
+9.2의 수정으로 Phase 1~5 테스트는 다시 통과했지만, `OrderPlatformApplicationEndToEndTest`(진짜 `@EnableAutoConfiguration` 경로를 쓰는 유일한 테스트)는 여전히 같은 "테이블이 이미 있다" 오류로 실패했다 - 이번엔 우연한 스캔 오염이 아니라 **의도한 대로 `@EnableAutoConfiguration`이 정상적으로 동작한 결과**였다. Boot의 `SqlInitializationAutoConfiguration`은 클래스패스에서 `schema.sql`을 자동으로 찾아 실행해 주는데, `JdbcConfig#dataSource()`가 `EmbeddedDatabaseBuilder#addScript()`로 이미 그 파일을 실행해 둔 `DataSource` 빈을 그대로 재사용하다 보니(`@ConditionalOnMissingBean` 덕분에 Boot가 새 `DataSource`를 만들지는 않는다), 같은 스크립트가 같은 데이터소스에 두 번 실행되는 것 자체가 문제였다. `OrderPlatformApplication`의 `@EnableAutoConfiguration(exclude = SqlInitializationAutoConfiguration.class)`로 Boot의 자동 스키마 초기화를 명시적으로 껐다 - "우리가 이미 끝낸 일을 Boot가 또 하려고 한다"는 걸 알아차리고 그 중복만 정확히 제거한 것이다.
+
+### 9.5 요청 관측 Starter — 배선 코드 없이 실제로 작동하는 것을 확인
+
+`OrderPlatformApplicationEndToEndTest`가 이 캡스톤 전체의 결승점 격이다: `OrderPlatformApplication`을 `@EnableAutoConfiguration`으로 띄우고, `MockMvc`로 `/orders/999999`에 실제 HTTP 요청을 보낸 뒤, `spring-extensions/mini-observability-starter`의 `ObservationLog`에 그 경로가 기록됐는지 확인한다. 이 모듈의 코드 어디에도 `RequestObservationInterceptor`를 등록하는 코드가 없다 - `mini-observability-starter:starter` 의존성 하나와 `@EnableAutoConfiguration` 하나로, 그 스타터의 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`가 자동으로 발견되고, `WebMvcConfigurer` 빈으로 등록된 인터셉터가 `OrderWebConfig`의 `@EnableWebMvc` MVC 파이프라인(우리가 만든 것)에 자연스럽게 합류했다.
+
+### 9.6 테스트
+
+[`PaymentGatewayAutoConfigurationTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/boot/PaymentGatewayAutoConfigurationTest.java) (4개), [`NotificationAutoConfigurationTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/boot/NotificationAutoConfigurationTest.java) (4개) — `ApplicationContextRunner` + `AutoConfigurations.of(...)` 기반, project 32와 같은 관점(기본 설정/비활성화/사용자 정의 빈 우선/프로퍼티 바인딩)에 채널 주입 순서 안전성까지 추가:
+
+| 테스트 | 확인하는 것 |
+| --- | --- |
+| `defaultConfigurationRegistersThePaymentGatewayClient` / `...TheDispatcherEvenWithNoChannelsPresent` | 정상 흐름 — 기본 설정에서 빈 생성 |
+| `disablingThePropertyPreventsRegistration`(양쪽) | 경계 조건 — `enabled=false`면 등록하지 않음 |
+| `userDefinedClientMakesTheAutoConfigurationBackOff` / `userDefinedDispatcherMakesTheAutoConfigurationBackOff` | 사용자 정의 빈이 있으면 자동 설정이 물러남(`@ConditionalOnMissingBean`) |
+| `connectTimeoutPropertyBindsAndFlowsIntoTheCreatedClient` | 프로퍼티 바인딩 검증 |
+| `channelsDeclaredByUserConfigurationAreInjectedRegardlessOfImportOrder` | 경계 조건 — `@ConditionalOnBean` 대신 파라미터 주입을 택한 설계가 실제로 순서에 안전함 |
+
+[`OrderPlatformApplicationEndToEndTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/boot/OrderPlatformApplicationEndToEndTest.java) (1개) — 9.5에서 설명한 결승점 테스트.
+
+## 10. 캡스톤 완료
+
+Phase 1~6이 전부 끝났다 - IoC/생명주기(Phase 1), AOP(Phase 2), 트랜잭션(Phase 3), MVC(Phase 4), 이벤트(Phase 5), Boot(Phase 6) 순서로, 카탈로그(`docs/plan/02-project-catalog.md` 16번 절)가 요구한 21개 세부 기법을 전부 실제 동작하는 코드와 테스트로 채웠다. `sample-app/mini-order-platform` 모듈은 최종적으로 43개 테스트(전부 실제 Spring 컨테이너/DB/HTTP를 통과하는 통합 테스트, 목 없음)를 갖췄고, Phase 6에서 겪은 세 가지 함정(§9.2~9.4)은 이 캡스톤 전체를 통틀어 가장 오래 걸린, 그리고 가장 "Spring을 실제로 이해하지 못하면 못 만들 종류"의 디버깅이었다 - 개별 Phase에서는 각 개념을 하나씩 독립적으로 확인하는 것으로 충분했지만, 6개 Phase를 전부 한 애플리케이션에 합치는 순간에만 드러나는 상호작용(컴포넌트 스캔 범위와 `@EnableAutoConfiguration`의 상호작용, 테스트 픽스처와 프로덕션 스캔 루트의 공유, 우리 초기화와 Boot 초기화의 중복)이었다는 점이 바로 이 프로젝트가 "종합" 프로젝트인 이유였다.

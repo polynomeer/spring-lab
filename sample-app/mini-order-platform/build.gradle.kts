@@ -20,4 +20,11 @@ dependencies {
     testImplementation(libs.spring.test)
     testImplementation(libs.hamcrest)
     testImplementation(libs.json.path)
+    // Phase 6 (Boot). autoconfigure만 있으면 조건부 빈 등록은 충분하지만, 실제
+    // @EnableAutoConfiguration 진입점(OrderPlatformApplication)을 내장 톰캣으로 띄우려면
+    // spring-boot(starter-web)까지 필요하다 - :starter가 :autoconfigure와 spring-boot-starter-web을
+    // api로 함께 끌고 온다(project 32와 같은 구성).
+    implementation(libs.spring.boot.autoconfigure)
+    implementation(project(":spring-extensions:mini-observability-starter:starter"))
+    testImplementation(libs.spring.boot.test)
 }
