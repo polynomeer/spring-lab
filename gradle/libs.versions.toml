@@ -14,6 +14,7 @@ hibernateValidator = "8.0.2.Final"
 jakartaEl = "4.0.2"
 tomcatEmbed = "10.1.57"
 snakeyaml = "2.4"
+byteBuddy = "1.15.11"
 
 [libraries]
 spring-context = { module = "org.springframework:spring-context", version.ref = "spring" }
@@ -37,6 +38,7 @@ hibernate-validator = { module = "org.hibernate.validator:hibernate-validator", 
 jakarta-el = { module = "org.glassfish:jakarta.el", version.ref = "jakartaEl" }
 tomcat-embed-core = { module = "org.apache.tomcat.embed:tomcat-embed-core", version.ref = "tomcatEmbed" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
+byte-buddy = { module = "net.bytebuddy:byte-buddy", version.ref = "byteBuddy" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine" }
