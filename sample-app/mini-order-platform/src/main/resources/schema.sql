@@ -21,3 +21,18 @@ CREATE TABLE order_outbox_events (
     payload VARCHAR(500) NOT NULL,
     published BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+CREATE TABLE products (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    price_won BIGINT NOT NULL,
+    stock INT NOT NULL
+);
+
+CREATE TABLE order_line_items (
+    id BIGINT PRIMARY KEY,
+    order_id BIGINT NOT NULL,
+    product_id BIGINT NOT NULL,
+    quantity INT NOT NULL,
+    unit_price_won BIGINT NOT NULL
+);

@@ -1,5 +1,7 @@
 package lab.sampleapp.orderplatform.order;
 
+import java.util.List;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -9,6 +11,8 @@ import lab.sampleapp.orderplatform.OrderPlatformConfig;
 import lab.sampleapp.orderplatform.aop.CurrentActor;
 import lab.sampleapp.orderplatform.aop.Role;
 import lab.sampleapp.orderplatform.payment.PaymentMethod;
+import lab.sampleapp.orderplatform.product.Product;
+import lab.sampleapp.orderplatform.product.ProductRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -36,17 +40,35 @@ class OrderPlacementServiceTest {
         }
     }
 
+    private static Product seedProduct(
+            AnnotationConfigApplicationContext ctx, long id, long priceWon, int stock) {
+        Product product = new Product(id, "product-" + id, priceWon, stock);
+        ctx.getBean(ProductRepository.class).save(product);
+        return product;
+    }
+
     @Test
     void placingAnOrderWithSuccessfulPaymentCommitsOrderPaymentHistoryAndOutboxTogether() {
         AnnotationConfigApplicationContext ctx = buildContext();
+        seedProduct(ctx, 501L, 10_000, 5);
         OrderPlacementService service = ctx.getBean(OrderPlacementService.class);
 
-        Order placed = service.placeOrder("cust-1", PaymentMethod.CARD, 10_000);
+        Order placed = service.placeOrder(
+                "cust-1", PaymentMethod.CARD, List.of(new OrderItemRequest(501L, 1)));
 
         assertThat(placed.status()).isEqualTo(OrderStatus.PAID);
+        assertThat(placed.amountWon()).isEqualTo(10_000); // 클라이언트가 아니라 Product 가격에서 계산됨
 
         OrderRepository orderRepository = ctx.getBean(OrderRepository.class);
         assertThat(orderRepository.findById(placed.id())).contains(placed);
+
+        OrderLineItemRepository lineItemRepository = ctx.getBean(OrderLineItemRepository.class);
+        assertThat(lineItemRepository.findByOrderId(placed.id()))
+                .hasSize(1)
+                .allMatch(item -> item.productId() == 501L && item.quantity() == 1 && item.unitPriceWon() == 10_000);
+
+        ProductRepository productRepository = ctx.getBean(ProductRepository.class);
+        assertThat(productRepository.findById(501L)).map(Product::stock).contains(4); // 5 - 1
 
         PaymentHistoryRepository historyRepository = ctx.getBean(PaymentHistoryRepository.class);
         assertThat(historyRepository.findByOrderId(placed.id()))
@@ -65,21 +87,29 @@ class OrderPlacementServiceTest {
     }
 
     @Test
-    void aFailedPaymentRollsBackTheOrderButThePaymentHistoryRecordSurvives() {
+    void aFailedPaymentRollsBackTheOrderAndTheStockButThePaymentHistoryRecordSurvives() {
         AnnotationConfigApplicationContext ctx = buildContext();
+        // 가격이 0원인 상품 - PointPaymentGateway는 amountWon <= 0이면 예외 없이
+        // success=false인 PaymentResult를 돌려준다("시스템 오류로 인한 실패"가 아니라
+        // "정상적으로 거절된 결제"를 재현하기 위해 일부러 고른 경로다 - 예외가 던져지면
+        // REQUIRES_NEW 트랜잭션 자체도 롤백되어 결제 이력이 남지 않는다).
+        seedProduct(ctx, 502L, 0, 5);
         OrderPlacementService service = ctx.getBean(OrderPlacementService.class);
 
-        // PointPaymentGateway는 amountWon <= 0이면 예외 없이 success=false인 PaymentResult를
-        // 돌려준다 - "시스템 오류로 인한 실패"가 아니라 "정상적으로 거절된 결제"를 재현하기 위해
-        // 일부러 고른 경로다(예외가 던져지면 REQUIRES_NEW 트랜잭션 자체도 롤백되어 결제 이력이
-        // 남지 않는다).
-        assertThatThrownBy(() -> service.placeOrder("cust-1", PaymentMethod.POINT, 0))
+        assertThatThrownBy(() -> service.placeOrder(
+                "cust-1", PaymentMethod.POINT, List.of(new OrderItemRequest(502L, 1))))
                 .isInstanceOf(PaymentFailedException.class);
 
         long orderId = 1L; // 이 컨텍스트에서 발급된 첫 주문 ID
 
         OrderRepository orderRepository = ctx.getBean(OrderRepository.class);
         assertThat(orderRepository.findById(orderId)).isEmpty(); // 주문 저장은 롤백됨
+
+        OrderLineItemRepository lineItemRepository = ctx.getBean(OrderLineItemRepository.class);
+        assertThat(lineItemRepository.findByOrderId(orderId)).isEmpty();
+
+        ProductRepository productRepository = ctx.getBean(ProductRepository.class);
+        assertThat(productRepository.findById(502L)).map(Product::stock).contains(5); // 차감도 롤백됨
 
         PaymentHistoryRepository historyRepository = ctx.getBean(PaymentHistoryRepository.class);
         assertThat(historyRepository.findByOrderId(orderId))
@@ -106,8 +136,10 @@ class OrderPlacementServiceTest {
     @Test
     void swallowingAnInnerRequiredValidationFailureStillMarksTheOuterTransactionRollbackOnly() {
         AnnotationConfigApplicationContext ctx = buildContext();
+        seedProduct(ctx, 503L, 10_000, 5);
         OrderPlacementService placementService = ctx.getBean(OrderPlacementService.class);
-        Order paidOrder = placementService.placeOrder("cust-1", PaymentMethod.CARD, 10_000);
+        Order paidOrder = placementService.placeOrder(
+                "cust-1", PaymentMethod.CARD, List.of(new OrderItemRequest(503L, 1)));
 
         OrderCancellationService cancellationService = ctx.getBean(OrderCancellationService.class);
 

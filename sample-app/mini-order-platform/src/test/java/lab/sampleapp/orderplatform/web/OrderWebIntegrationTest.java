@@ -8,6 +8,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
 
+import lab.sampleapp.orderplatform.product.Product;
+import lab.sampleapp.orderplatform.product.ProductRepository;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -36,6 +39,7 @@ class OrderWebIntegrationTest {
         context.setServletContext(new MockServletContext());
         context.register(OrderWebConfig.class);
         context.refresh();
+        context.getBean(ProductRepository.class).save(new Product(801L, "product-801", 10_000, 10));
 
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
     }
@@ -50,7 +54,7 @@ class OrderWebIntegrationTest {
         mockMvc.perform(post("/orders?method=CARD")
                         .header("X-Member-Id", "cust-1")
                         .contentType(APPLICATION_JSON)
-                        .content("{\"amountWon\": 10000}"))
+                        .content("{\"items\": [{\"productId\": 801, \"quantity\": 1}]}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.memberId").value("cust-1"))
@@ -62,7 +66,7 @@ class OrderWebIntegrationTest {
     void placingAnOrderWithoutAMemberHeaderIsRejectedBeforeReachingTheService() throws Exception {
         mockMvc.perform(post("/orders?method=CARD")
                         .contentType(APPLICATION_JSON)
-                        .content("{\"amountWon\": 10000}"))
+                        .content("{\"items\": [{\"productId\": 801, \"quantity\": 1}]}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.data.code").value("UNAUTHENTICATED"));
@@ -103,12 +107,12 @@ class OrderWebIntegrationTest {
         mockMvc.perform(post("/orders?method=CARD")
                         .header("X-Member-Id", "cust-1")
                         .contentType(APPLICATION_JSON)
-                        .content("{\"amountWon\": 10000}"))
+                        .content("{\"items\": [{\"productId\": 801, \"quantity\": 1}]}"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/orders?method=CARD")
                         .contentType(APPLICATION_JSON)
-                        .content("{\"amountWon\": 10000}"))
+                        .content("{\"items\": [{\"productId\": 801, \"quantity\": 1}]}"))
                 .andExpect(status().isUnauthorized());
     }
 }

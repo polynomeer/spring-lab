@@ -1,5 +1,7 @@
 package lab.sampleapp.orderplatform.event;
 
+import java.util.List;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
@@ -12,9 +14,12 @@ import lab.sampleapp.orderplatform.aop.CurrentActor;
 import lab.sampleapp.orderplatform.aop.Role;
 import lab.sampleapp.orderplatform.notification.SentNotificationLog;
 import lab.sampleapp.orderplatform.order.Order;
+import lab.sampleapp.orderplatform.order.OrderItemRequest;
 import lab.sampleapp.orderplatform.order.OrderOutboxRepository;
 import lab.sampleapp.orderplatform.order.OrderPlacementService;
 import lab.sampleapp.orderplatform.payment.PaymentMethod;
+import lab.sampleapp.orderplatform.product.Product;
+import lab.sampleapp.orderplatform.product.ProductRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,11 +52,13 @@ class OrderCompletionEventTest {
     @Test
     void placingAnOrderDispatchesNotificationsAndPublishesTheOutboxEventAfterCommit() {
         AnnotationConfigApplicationContext ctx = buildContext();
+        ctx.getBean(ProductRepository.class).save(new Product(701L, "product-701", 10_000, 5));
         OrderPlacementService service = ctx.getBean(OrderPlacementService.class);
 
         // placeOrder()가 반환한 시점에는 이미 커밋과 그에 이은 AFTER_COMMIT 리스너들까지 전부
         // 동기적으로 끝나 있어야 한다 - 별도로 기다릴 필요가 없다.
-        Order placed = service.placeOrder("cust-1", PaymentMethod.CARD, 10_000);
+        Order placed = service.placeOrder(
+                "cust-1", PaymentMethod.CARD, List.of(new OrderItemRequest(701L, 1)));
 
         SentNotificationLog notificationLog = ctx.getBean(SentNotificationLog.class);
         assertThat(notificationLog.entries())
@@ -94,11 +101,13 @@ class OrderCompletionEventTest {
     @Test
     void aBrokerFailureLeavesTheOutboxEventUnpublishedForTheNextPoll() {
         AnnotationConfigApplicationContext ctx = buildContext();
+        ctx.getBean(ProductRepository.class).save(new Product(702L, "product-702", 10_000, 5));
         OrderPlacementService service = ctx.getBean(OrderPlacementService.class);
         FakeOrderEventBroker broker = ctx.getBean(FakeOrderEventBroker.class);
 
         broker.failNextSend();
-        Order placed = service.placeOrder("cust-1", PaymentMethod.CARD, 10_000);
+        Order placed = service.placeOrder(
+                "cust-1", PaymentMethod.CARD, List.of(new OrderItemRequest(702L, 1)));
 
         OrderOutboxRepository outboxRepository = ctx.getBean(OrderOutboxRepository.class);
         assertThat(outboxRepository.findByOrderId(placed.id())).allMatch(event -> !event.published());

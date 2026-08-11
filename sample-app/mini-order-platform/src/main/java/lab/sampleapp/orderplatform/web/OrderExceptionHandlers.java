@@ -11,6 +11,8 @@ import lab.sampleapp.orderplatform.aop.AccessDeniedException;
 import lab.sampleapp.orderplatform.order.OrderNotCancellableException;
 import lab.sampleapp.orderplatform.order.OrderNotFoundException;
 import lab.sampleapp.orderplatform.order.PaymentFailedException;
+import lab.sampleapp.orderplatform.product.InsufficientStockException;
+import lab.sampleapp.orderplatform.product.ProductNotFoundException;
 
 /**
  * 이 캡스톤 전역에서 던져질 수 있는 예외를 한 곳에 모아 일관된 {@link ErrorResponse} 형태로
@@ -79,5 +81,17 @@ public class OrderExceptionHandlers {
     ResponseEntity<ErrorResponse> handleMissingCurrentMember(MissingCurrentMemberException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(new ErrorResponse("UNAUTHENTICATED", ex.getMessage()));
+    }
+
+    @ExceptionHandler(ProductNotFoundException.class)
+    ResponseEntity<ErrorResponse> handleProductNotFound(ProductNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse("PRODUCT_NOT_FOUND", ex.getMessage()));
+    }
+
+    @ExceptionHandler(InsufficientStockException.class)
+    ResponseEntity<ErrorResponse> handleInsufficientStock(InsufficientStockException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("INSUFFICIENT_STOCK", ex.getMessage()));
     }
 }

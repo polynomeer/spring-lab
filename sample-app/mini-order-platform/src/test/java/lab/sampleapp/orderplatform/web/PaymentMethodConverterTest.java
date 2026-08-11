@@ -8,6 +8,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
 
+import lab.sampleapp.orderplatform.product.Product;
+import lab.sampleapp.orderplatform.product.ProductRepository;
+
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -24,6 +27,7 @@ class PaymentMethodConverterTest {
         context.setServletContext(new MockServletContext());
         context.register(OrderWebConfig.class);
         context.refresh();
+        context.getBean(ProductRepository.class).save(new Product(901L, "product-901", 1000, 10));
 
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
     }
@@ -38,7 +42,7 @@ class PaymentMethodConverterTest {
         mockMvc.perform(post("/orders?method=POINT")
                         .header("X-Member-Id", "cust-1")
                         .contentType(APPLICATION_JSON)
-                        .content("{\"amountWon\": 1000}"))
+                        .content("{\"items\": [{\"productId\": 901, \"quantity\": 1}]}"))
                 .andExpect(status().isOk());
     }
 
@@ -51,7 +55,7 @@ class PaymentMethodConverterTest {
         mockMvc.perform(post("/orders?method=BANK_TRANSFER")
                         .header("X-Member-Id", "cust-1")
                         .contentType(APPLICATION_JSON)
-                        .content("{\"amountWon\": 1000}"))
+                        .content("{\"items\": [{\"productId\": 901, \"quantity\": 1}]}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.data.code").value("UNSUPPORTED_PAYMENT_METHOD"));
@@ -62,7 +66,7 @@ class PaymentMethodConverterTest {
         mockMvc.perform(post("/orders?method=NOT_A_REAL_METHOD")
                         .header("X-Member-Id", "cust-1")
                         .contentType(APPLICATION_JSON)
-                        .content("{\"amountWon\": 1000}"))
+                        .content("{\"items\": [{\"productId\": 901, \"quantity\": 1}]}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.data.code").value("UNSUPPORTED_PAYMENT_METHOD"));
     }

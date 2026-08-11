@@ -8,14 +8,14 @@
 
 ```text
 회원(Member)     - id, name, membership tier(BASIC/MEMBERSHIP)
-상품(Product)    - 여전히 없음 (Phase 4에서도 결제/주문 도메인만으로 충분해 도입하지 않았다 - 아래 참고)
+상품(Product)    - id, name, priceWon, stock. Phase 1~6 완료 이후, 11번 절에서 추가
 주문(Order)      - id, memberId, amountWon, status(PENDING/PAID/CANCELLED) - Phase 3
 결제(Payment)    - PaymentGateway 전략(CARD/POINT), PaymentGatewayClient(외부 PG 흉내), payment_history(주문과 분리 저장) - Phase 1/3
 알림(Notification) - NotificationChannel(email/sms), 컬렉션 주입으로 브로드캐스트
 감사 로그        - AuditLog(인메모리, Phase 2) - Phase 5는 건드리지 않았다
 ```
 
-도메인을 처음부터 다 만들지 않고 "이번 Phase가 요구하는 만큼만" 만든다 — 이 저장소 전체가 지켜온 "축소 구현" 원칙을 캡스톤 안에서도 그대로 따른 것이다. Phase 4(MVC)를 진행하면서 실제로 필요한 API가 "주문 생성/조회/취소"와 "환불"뿐이라는 게 확인돼서 Product는 여전히 도입하지 않았다 - 애초에 "MVC를 다루려면 상품 목록 API가 있어야 한다"는 가정 자체가 틀렸었다.
+도메인을 처음부터 다 만들지 않고 "이번 Phase가 요구하는 만큼만" 만든다 — 이 저장소 전체가 지켜온 "축소 구현" 원칙을 캡스톤 안에서도 그대로 따른 것이다. Phase 1~6(카탈로그가 요구한 21개 세부 기법) 동안은 Product 없이 `amountWon`을 그냥 파라미터로 받는 것으로 충분했다 - 애초에 "MVC를 다루려면 상품 목록 API가 있어야 한다"는 가정 자체가 틀렸었다. Phase 6까지 다 끝난 뒤에야, 카탈로그 범위 밖의 확장으로 Product를 추가했다(11번 절) - 그제서야 "주문 금액을 클라이언트가 부르게 해도 되는가"라는, 그전까지는 없었던 질문이 생겼다.
 
 ## 2. 모듈 구조
 
@@ -36,7 +36,8 @@ sample-app/mini-order-platform/
                   OrderOutboxPublisher, OrderEventBroker/FakeOrderEventBroker
     boot/       - PaymentGatewayAutoConfiguration/NotificationAutoConfiguration(+Properties),
                   OrderPlatformApplication(@EnableAutoConfiguration 진입점)
-    OrderPlatformConfig.java - Phase 1~3, 5용 진입점(web + OrderPlatformApplication 제외)
+    product/    - Product/ProductRepository(원자적 재고 차감), ProductService(관리자 전용 등록)
+    OrderPlatformConfig.java - Phase 1~3, 5, 카탈로그 이후 확장용 진입점(web + OrderPlatformApplication 제외)
 ```
 
 ## 3. 학습 요소 → 구현 매핑
@@ -309,3 +310,51 @@ Phase 1의 `PaymentGatewayClient`와 `NotificationDispatcher`에서 `@Component`
 ## 10. 캡스톤 완료
 
 Phase 1~6이 전부 끝났다 - IoC/생명주기(Phase 1), AOP(Phase 2), 트랜잭션(Phase 3), MVC(Phase 4), 이벤트(Phase 5), Boot(Phase 6) 순서로, 카탈로그(`docs/plan/02-project-catalog.md` 16번 절)가 요구한 21개 세부 기법을 전부 실제 동작하는 코드와 테스트로 채웠다. `sample-app/mini-order-platform` 모듈은 최종적으로 43개 테스트(전부 실제 Spring 컨테이너/DB/HTTP를 통과하는 통합 테스트, 목 없음)를 갖췄고, Phase 6에서 겪은 세 가지 함정(§9.2~9.4)은 이 캡스톤 전체를 통틀어 가장 오래 걸린, 그리고 가장 "Spring을 실제로 이해하지 못하면 못 만들 종류"의 디버깅이었다 - 개별 Phase에서는 각 개념을 하나씩 독립적으로 확인하는 것으로 충분했지만, 6개 Phase를 전부 한 애플리케이션에 합치는 순간에만 드러나는 상호작용(컴포넌트 스캔 범위와 `@EnableAutoConfiguration`의 상호작용, 테스트 픽스처와 프로덕션 스캔 루트의 공유, 우리 초기화와 Boot 초기화의 중복)이었다는 점이 바로 이 프로젝트가 "종합" 프로젝트인 이유였다.
+
+이 절의 숫자(43개 테스트)는 카탈로그가 요구한 것을 전부 채운 시점 그대로 남겨 뒀다 - 그 뒤로 카탈로그 범위 밖의 확장(상품 도메인)을 추가했고, 그 경과는 [11번 절](#11-카탈로그-이후-확장--상품-도메인)에 정리했다.
+
+## 11. 카탈로그 이후 확장 — 상품 도메인
+
+카탈로그 16번 절이 이 캡스톤의 도메인으로 회원/상품/주문/결제/알림/감사 로그 여섯 개를 나열했지만, Phase 1~6이 요구한 21개 세부 기법 중 어느 것도 실제로 상품 도메인을 필요로 하지 않았다 - 그래서 §10까지 상품 없이 끝났다. 이 절은 카탈로그가 끝난 뒤 별도로 추가한 확장을 다룬다: `product` 패키지(`Product`, `ProductRepository`, `ProductService`)와, `OrderPlacementService`를 "클라이언트가 금액을 부르는" 방식에서 "상품 ID+수량만 받고 서버가 가격을 계산하는" 방식으로 다시 짠 것.
+
+### 11.1 왜 클라이언트가 가격을 보내면 안 되는가
+
+Phase 1~6 내내 `PlaceOrderRequest`는 `amountWon`을 그대로 받았다 - 캡스톤이 결제/트랜잭션/이벤트 메커니즘을 검증하는 데만 집중했기 때문에 "그 금액이 어디서 왔는가"는 범위 밖이었다. 상품 도메인을 도입하면서 이 결정을 다시 봐야 했다 - 실제 서비스라면 클라이언트가 가격을 마음대로 부를 수 있다는 것 자체가 보안 결함이다(요청을 조작해 100원짜리 주문으로 10만원짜리 상품을 사는 것과 같은 문제). 그래서 `OrderItemRequest`는 `productId`와 `quantity`만 담고, `OrderPlacementService.placeOrder()`가 `ProductRepository`에서 직접 가격을 조회해 합계를 계산한다 - 클라이언트가 가격을 조작할 수 있는 경로 자체가 API 설계에 없다.
+
+### 11.2 재고 차감을 원자적으로 만들기 — "조회 후 갱신"을 쓰지 않는다
+
+재고를 다루는 가장 흔한 실수는 "재고를 SELECT로 읽고, 자바에서 수량을 빼고, UPDATE로 다시 쓰는" 3단계 코드다 - 이 사이에 동시에 들어온 다른 트랜잭션이 끼어들면 두 트랜잭션 모두 "재고가 충분하다"고 판단하고 통과해 버릴 수 있다(트랜잭션 격리 수준에 따라 다르지만, 애플리케이션 코드 수준에서 막을 방법이 없다). `ProductRepository.decreaseStock()`은 이 3단계를 SQL 한 줄로 합친다:
+
+```sql
+UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?
+```
+
+조회와 조건 검사와 갱신이 전부 DB 엔진이 실행하는 하나의 문장 안에 있어서, 별도 락 없이도 원자적이다. 영향받은 행이 0이면(`WHERE` 조건에 걸려 아무 행도 갱신되지 않으면) 재고 부족이라는 뜻이다. `ProductRepositoryTest`가 이 세 가지를 확인한다: 충분할 때 성공, 부족할 때 실패하며 재고가 전혀 바뀌지 않음, 정확히 남은 만큼 요청하면 재고가 0이 되는 경계.
+
+### 11.3 여러 상품 중 하나가 부족하면 — "전부 아니면 전무"
+
+`OrderPlacementWithProductsTest.insufficientStockForOneItemRollsBackTheWholeOrderAndRestoresStockAlreadyDecremented`가 확인하는 시나리오: 주문에 상품 A(재고 충분)와 상품 B(재고 부족)가 함께 있으면, A의 재고가 먼저 차감된 뒤 B에서 `InsufficientStockException`이 던져진다. 이 예외로 `@Transactional` 메서드 전체가 롤백되므로, **이미 차감됐던 A의 재고도 함께 복구된다** - "일부 상품만 주문이 성사되는" 상태는 애초에 존재할 수 없다. 이건 새 메커니즘이 아니라 Phase 3에서 이미 검증한 로컬 트랜잭션 원자성(주문 저장+Outbox 저장이 함께 커밋/롤백되는 것과 같은 근거)이 재고 차감이라는 새로운 종류의 쓰기에도 그대로 적용된다는 걸 재확인한 것이다.
+
+### 11.4 관리자 전용 상품 등록 — Phase 2 AOP를 새 도메인에 재사용
+
+`ProductService.createProduct()`에 `@RequiresRole(Role.ADMIN)`/`@Audited`/`@Timed`를 그대로 붙였다 - 새 어드바이스를 만들지 않았다. `PaymentProcessingService.refund()`와 완전히 같은 패턴(컨트롤러가 서비스 빈을 직접 호출해야 프록시를 거쳐 어드바이스가 적용된다는 것 포함)이라, `ProductController.createProduct()`도 `@CurrentMember` 파라미터를 선언만 하고 값 자체는 쓰지 않는다 - 그 리졸버가 실행돼야 `CurrentActor`가 채워지기 때문이다. `ProductWebIntegrationTest`가 실제 HTTP 요청으로 CUSTOMER는 403, ADMIN은 성공하는 것까지 확인한다.
+
+### 11.5 기존 테스트에 미친 영향
+
+`OrderPlacementService.placeOrder()`의 시그니처가 `(memberId, method, long amountWon)`에서 `(memberId, method, List<OrderItemRequest>)`로 바뀌면서, Phase 3/4/5에서 이미 작성해 둔 테스트(`OrderPlacementServiceTest`, `OrderWebIntegrationTest`, `PaymentMethodConverterTest`, `OrderCompletionEventTest`)가 전부 컴파일조차 되지 않게 됐다. 각 테스트에 상품을 먼저 심어 두는 준비 단계를 추가하고 호출부를 고쳤다 - Phase 5가 Phase 3의 테스트 단언 하나를 깨뜨렸던 것(§8 "기존 테스트 업데이트")과 같은 종류의, "이전 Phase의 가정이 이후 확장으로 깨지는" 사례가 이번에도 반복됐다. 카탈로그 프로젝트들처럼 서로 독립된 모듈이 아니라 하나의 애플리케이션이 계속 성장하는 캡스톤이라는 이 문서 전체의 성격상, 앞으로도 이런 종류의 파급은 계속 생길 것으로 예상한다.
+
+### 11.6 테스트
+
+[`ProductRepositoryTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/product/ProductRepositoryTest.java) (3개), [`ProductServiceTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/product/ProductServiceTest.java) (2개), [`OrderPlacementWithProductsTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/order/OrderPlacementWithProductsTest.java) (3개), [`ProductWebIntegrationTest`](../../sample-app/mini-order-platform/src/test/java/lab/sampleapp/orderplatform/web/ProductWebIntegrationTest.java) (3개) - 총 11개 신규:
+
+| 테스트 | 확인하는 것 |
+| --- | --- |
+| `decreaseStockSucceedsWhenEnoughStockIsAvailable` / `...CanBringStockExactlyToZero` | 정상 흐름 + 경계 — 재고 차감이 정확한 수량만큼, 0까지 안전하게 |
+| `decreaseStockFailsAtomicallyAndLeavesStockUnchangedWhenNotEnough` | 경계 조건 — 부족하면 실패하고 재고는 그대로 |
+| `placingAnOrderWithMultipleLineItemsComputesTheTotalFromProductPrices` | 정상 흐름 — 합계가 클라이언트가 아니라 Product 가격에서 계산됨 |
+| `insufficientStockForOneItemRollsBackTheWholeOrderAndRestoresStockAlreadyDecremented` | 경계 조건 — 여러 상품 중 하나라도 부족하면 전체 롤백(이미 차감된 것도 복구) |
+| `orderingAnUnknownProductThrowsBeforeAnyStockIsTouched` | 경계 조건 — 존재하지 않는 상품 |
+| `creatingAProductAsCustomerIsDenied` / `...AsAdminSucceedsAndPersists` | Phase 2 AOP와의 통합 — 관리자만 상품을 등록할 수 있음 |
+| `adminCanCreateAProductAndAnyoneCanReadItBack` / `customerCannotCreateAProduct` / `fetchingAMissingProductReturns404` | 실제 HTTP 요청 — 등록은 관리자 전용, 조회는 인증 없이 가능 |
+
+모듈 전체 테스트는 43개에서 54개로 늘었다.

@@ -1,4 +1,8 @@
 package lab.sampleapp.orderplatform.web;
 
-public record PlaceOrderRequest(long amountWon) {
+import java.util.List;
+
+import lab.sampleapp.orderplatform.order.OrderItemRequest;
+
+public record PlaceOrderRequest(List<OrderItemRequest> items) {
 }

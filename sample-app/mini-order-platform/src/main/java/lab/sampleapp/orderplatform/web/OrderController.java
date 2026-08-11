@@ -34,13 +34,14 @@ public class OrderController {
     }
 
     // method는 @RequestParam이라 PaymentMethodConverter(String -> PaymentMethodParam)를 거친다 -
-    // amountWon은 JSON 본문이라 Jackson이 처리하고, 이 Converter와는 무관하다.
+    // items는 JSON 본문이라 Jackson이 처리하고, 이 Converter와는 무관하다. 가격은 요청에
+    // 아예 없다 - OrderPlacementService가 Product 테이블에서 직접 조회해 계산한다.
     @PostMapping
     public Order placeOrder(
             @CurrentMember CurrentActor.Actor actor,
             @RequestParam PaymentMethodParam method,
             @RequestBody PlaceOrderRequest request) {
-        return orderPlacementService.placeOrder(actor.id(), method.value(), request.amountWon());
+        return orderPlacementService.placeOrder(actor.id(), method.value(), request.items());
     }
 
     @GetMapping("/{id}")
