@@ -164,7 +164,7 @@ mini-webmvc (15~16주차, project 27)
 **핵심 16주에서**
 - mini 구현들의 일관된 생략: ~~JSON 실제 역직렬화(mini-webmvc)~~, ~~CGLIB 상당 서브클래스 프록시(mini-aop)~~, ~~NESTED 전파(mini-transaction)~~, ~~`@ControllerAdvice` 전역 예외 처리(mini-webmvc)~~ - 전부 "핵심 메커니즘을 이해하는 데는 필요 없었던" 것들이었지만, 네 개 다 이후에 마쳤다(CGLIB 상당 서브클래스 프록시는 11번 절, NESTED 전파는 12번 절, JSON 역직렬화는 13번 절, `@ControllerAdvice` 전역 예외 처리는 14번 절). 이 목록에 더 이상 미착수 항목이 없다.
 - 7주차에서 남긴 ASM 기반 컴포넌트 스캔의 실제 성능/안전성 비교는 시도하지 않았다.
-- 16주차에서 발견한 mini-webmvc의 인자 리졸버 캐싱 부재는 정확성에는 영향 없지만 실제라면 성능 이슈가 됐을 것이다.
+- ~~16주차에서 발견한 mini-webmvc의 인자 리졸버 캐싱 부재는 정확성에는 영향 없지만 실제라면 성능 이슈가 됐을 것이다.~~ — 15번 절에 적었듯 이후에 마쳤다.
 
 **선택 4주에서**
 - 17주차에서 미룬 "웹 서버가 실제로 언제 뜨는가"는 자동 설정(18주차) 없이는 관찰할 수 없어서 미뤘는데, 20주차에서 실제 웹 자동 설정을 통합했지만 이 관찰 자체는 별도로 다시 다루지 않았다.
@@ -294,3 +294,15 @@ Phase 1~5는 각자 새 개념 하나씩을 새 코드로 검증하는 식이라
 이것으로 7번 절 "남겨 둔 질문"의 "핵심 16주에서" 목록 중 mini 구현들의 일관된 생략 네 항목(CGLIB 상당 서브클래스 프록시, NESTED 전파, JSON 역직렬화, `@ControllerAdvice` 전역 예외 처리)이 전부 채워졌다.
 
 저장소 전체 자동화 테스트는 360개에서 362개가 됐다.
+
+## 15. mini-webmvc의 인자 리졸버 캐싱 부재를 채우다
+
+7번 절 "핵심 16주에서" 목록의 마지막 남은 항목을 채웠다: `mini-spring/mini-webmvc`의 `HandlerMethodAdapter`에 `Map<Parameter, MiniArgumentResolver>` 캐시를 추가해서, 파라미터마다 "어떤 리졸버가 처리하는가"를 한 번만 찾고 이후 요청부터는 그 결과를 재사용하게 했다 - 실제 `HandlerMethodArgumentResolverComposite.argumentResolverCache`와 정확히 같은 구조다. 상세 내용은 [`docs/16-controller-invocation/controller-invocation.md`](../16-controller-invocation/controller-invocation.md)의 후기(5·8·10·12번 절)에 반영했다 - 이 절은 그중 반복해서 배울 만한 것만 추린다.
+
+**결과값만으로는 캐시가 동작하는지 증명할 수 없었다.** 캐싱을 추가하기 전에도 후에도 `MiniDispatcherServletTest`의 응답 JSON은 똑같이 맞다 - 캐시가 틀리게 구현돼도(예: 캐시를 아예 안 쓰거나, 엉뚱한 리졸버를 캐싱해도) 최종 결과값만 보면 차이가 드러나지 않을 수 있다. 그래서 `supports()` 호출 횟수 자체를 세는 `CountingArgumentResolver`로 감싸서, "같은 파라미터로 3번 요청했는데 `supports()`는 정확히 1번만 불렸다"는 것을 직접 관찰 대상으로 삼았다 - `java.lang.reflect.Parameter`가 선언 executable과 인덱스로 `equals()`/`hashCode()`를 정의해 둔 덕분에(매 요청마다 `method.getParameters()`가 새 배열을 반환해도) 캐시 키로 그대로 쓸 수 있다는 것도 이 테스트를 짜면서 처음으로 직접 검증했다.
+
+**"정확성에는 영향 없는 최적화"를 검증하는 방법은 기능 검증과 다르다.** 이 항목은 다른 세 개(NESTED, CGLIB, JSON 역직렬화)와 성격이 다르다 - 저 셋은 "안 되던 게 된다"는 관찰 가능한 동작 변화가 있었지만, 캐싱은 "이미 되던 게 더 적은 일로 된다"는 변화라 결과만 보는 테스트로는 아예 검증이 불가능하다. 대상 코드를 감싸는 얇은 계측 레이어(`CountingArgumentResolver`)를 별도로 만들어야 했다는 점에서, "동작을 검증한다"와 "내부 경로를 검증한다"가 서로 다른 도구를 요구한다는 것을 새로 배웠다.
+
+이것으로 7번 절 "남겨 둔 질문"의 "핵심 16주에서" 목록 중 남은 항목은 7주차의 ASM 기반 컴포넌트 스캔 비교 하나뿐이다. "선택 4주에서" 목록의 두 항목(17주차 웹 서버 기동 시점 관찰, 20주차 실제 Micrometer 연동)도 여전히 남아 있다.
+
+저장소 전체 자동화 테스트는 362개에서 364개가 됐다.

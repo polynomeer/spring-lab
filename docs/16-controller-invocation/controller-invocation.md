@@ -6,6 +6,8 @@
 
 **후기 두 번째**: 10번 절이 남겨 뒀던 마지막 생략 - "`@ControllerAdvice` 상당(다른 컨트롤러의 예외까지 전역으로 처리)이 없다 - `AnnotationExceptionResolver`는 같은 빈 안에서만 찾는다" - 도 채웠다. `AnnotationExceptionResolver`에 `registerControllerAdvice(Object)`를 추가해서, 같은 빈에서 못 찾으면 등록해 둔 전역 advice 빈들을(등록 순서대로) 폴백으로 검사하게 했다. 5·8·10번 절에 그 내용을 반영했다.
 
+**후기 세 번째**: 10번 절이 "생략한 것"으로 남겨 뒀던 마지막 항목 - "리졸버 매칭 결과 캐싱이 없다" - 도 채웠다. `HandlerMethodAdapter`에 `Map<Parameter, MiniArgumentResolver>` 캐시를 추가해서, 한 번 매칭된 파라미터는 다음 요청부터 `supports()` 재검사 없이 바로 그 리졸버로 넘어가게 했다. 5·8·10번 절에 그 내용을 반영했다.
+
 ## 1. 이번 질문
 
 - 컨트롤러 메서드의 파라미터는 어떻게 실제 값으로 채워지는가 - 여러 `ArgumentResolver` 후보가 있으면 무엇이 이기는가?
@@ -66,7 +68,7 @@ private Object[] resolveArguments(Method method, HttpServletRequest request) thr
 | `ResponseBodyAdvice` | `@ResponseBody` 처리 파이프라인 **내부**에서 직렬화 직전 본문을 가로채는 별도 확장점 - `RequestResponseBodyAdviceChain`으로 여러 개가 체이닝됨 |
 | `RequestResponseBodyMethodProcessor` | `@RequestBody`/`@ResponseBody`를 함께 처리 - 생성자에 advice 목록을 넘기지 않으면 advice 자체가 비활성화됨 |
 | `ExceptionHandlerExceptionResolver` | 예외를 던진 컨트롤러의 클래스에서 먼저 `@ExceptionHandler`를 찾고, 없으면 `@ControllerAdvice` 빈들에서 찾음 |
-| (mini) `MiniArgumentResolver`/`MiniReturnValueHandler` | 실제 타입과 이름·역할 대응 - 캐싱은 생략 |
+| (mini) `MiniArgumentResolver`/`MiniReturnValueHandler` | 실제 타입과 이름·역할 대응 - `HandlerMethodAdapter`가 `Parameter → MiniArgumentResolver` 매칭 결과를 캐싱함(후기에서 추가) |
 | (mini) `AnnotationExceptionResolver` | 같은 빈에서 먼저 `@MiniExceptionHandler`를 찾고, 없으면 `registerControllerAdvice()`로 등록해 둔 전역 빈들을 폴백으로 찾음(후기에서 추가) |
 
 ## 6. 호출 흐름
@@ -156,6 +158,13 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 | 객체를 record가 아닌 타입에 역직렬화 시도 | `IllegalArgumentException` |
 | 중괄호가 안 닫힌 채 끝나는/값 뒤에 남는 문자가 있는 JSON | `IllegalArgumentException` |
 
+(후기) [`HandlerMethodAdapterTest`](../../mini-spring/mini-webmvc/src/test/java/lab/minispring/webmvc/HandlerMethodAdapterTest.java) (2개, 리졸버 캐싱 검증):
+
+| 실험 | 결과 |
+| --- | --- |
+| 같은 `HandlerMethod`로 3번 연속 호출, `supports()` 호출 횟수를 세는 리졸버로 감쌈 | 각 파라미터당 `supports()`는 **첫 요청에서만** 호출되고(캐시 miss 1회) 이후 2번은 캐시를 타서 호출되지 않음 - 그런데도 세 번 다 올바른 값으로 해석됨 |
+| 아무 리졸버도 지원하지 않는 파라미터 | 캐시 유무와 무관하게 여전히 `IllegalStateException` |
+
 **직접 겪은 버그**: `@MiniPathVariable`을 추가하면서 `/api/users/{id}`와 `/api/users/wrapped`를 같은 컨트롤러에 등록했는데, `Class#getMethods()`의 순회 순서가 보장되지 않아 `{id}` 패턴이 `wrapped()`보다 먼저 등록되는 경우 `id="wrapped"`로 해석되어 `NumberFormatException`(500)이 났다 - 15주차 real-Spring 실험에서 확인한 리터럴 vs 변수 경로 specificity 문제를 mini에서 그대로 재현한 것이었다. 변수 세그먼트 개수로 정렬해 리터럴 패턴을 먼저 검사하도록 고쳤다(10번에서 자세히).
 
 ## 9. 공식 테스트 분석
@@ -178,9 +187,9 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 - 경로 변수 추출을 위한 `AnnotationHandlerMapping`의 패턴 매칭 확장 + specificity 정렬(리터럴 우선)
 - **(후기에서 추가) `MiniJsonReader`**: `MiniJsonWriter`의 반대편 - record 하나로만(중첩 record는 재귀로) 역직렬화하는 손으로 짠 재귀 하강 파서. `RequestBodyArgumentResolver`가 대상 파라미터 타입을 보고 `String`이면 원문을, record면 `MiniJsonReader.read(body, type)`의 결과를 넘긴다 - 실제 Spring이 `StringHttpMessageConverter`/`MappingJackson2HttpMessageConverter` 중 대상 타입에 맞는 컨버터를 고르는 지점과 같다.
 - **(후기에서 추가) `AnnotationExceptionResolver#registerControllerAdvice(Object)`**: 실제 `@ControllerAdvice`의 "로컬 우선 → 전역 폴백" 2단계 탐색 중 두 번째 단계. `resolveException()`은 먼저 예외를 던진 핸들러와 같은 빈에서 찾고(기존 동작, 변경 없음), 못 찾으면 등록된 advice 빈들을 등록 순서대로 검사한다 - `AnnotationHandlerMapping#registerController()`가 컨트롤러 빈을 명시적으로 등록받는 것과 같은 방식으로, advice 빈도 컴포넌트 스캔 없이 명시적으로 등록받는다.
+- **(후기에서 추가) `HandlerMethodAdapter`의 리졸버 매칭 캐시**: 실제 `HandlerMethodArgumentResolverComposite.argumentResolverCache`와 같은 구조 - `Map<Parameter, MiniArgumentResolver>`(`ConcurrentHashMap`)에 "이 파라미터는 어떤 리졸버가 처리하는가"를 한 번만 찾아 캐싱한다. `resolveArgument()`는 이제 `resolverCache.computeIfAbsent(parameter, this::findResolver)`로 캐시를 먼저 확인하고, `findResolver()`(옛 `resolveArgument()`의 순회 로직)는 캐시 miss일 때만 호출된다.
 
 **생략한 것 (의도적)**
-- **리졸버 매칭 결과 캐싱이 없다** - 실제 `HandlerMethodArgumentResolverComposite`는 `Map<MethodParameter, HandlerMethodArgumentResolver>`로 한 번 찾은 결과를 캐싱해서 매 요청마다 리졸버 목록을 처음부터 다시 훑지 않는다. mini는 매번 처음부터 순회한다 - 정확성에는 영향 없지만 실제라면 요청마다 반복되는 비용이다.
 - **`MiniJsonReader`는 record 전용이다** - 리스트/맵/제네릭/커스텀 역직렬화 규칙은 다루지 않는다(`MiniJsonWriter`가 record만 직렬화하는 것과 대칭). 알 수 없는 JSON 필드는 조용히 건너뛴다 - Jackson의 기본값(`FAIL_ON_UNKNOWN_PROPERTIES=true`)과 다른 의도적으로 관대한 선택이다. 실제 Jackson 기반 역직렬화는 이번 주 real-Spring 실험(project 25/26)에서 이미 다뤘다.
 - **`ResponseBodyAdvice` 상당 확장점이 없다** - mini의 `MiniReturnValueHandler`는 실제 `HandlerMethodReturnValueHandler`와 `ResponseBodyAdvice`를 하나로 합친 형태다. 이 둘을 분리하지 않았으므로, project 26에서 확인한 "수동 처리기가 advice를 우회한다"는 함정 자체가 mini에는 없다(애초에 그 두 확장점이 분리돼 있지 않아서 생기지 않는 문제다).
 - **(후기에서 갱신) `@ControllerAdvice`의 컴포넌트 스캔 자동 발견이 없다** - 실제 Spring은 `@ControllerAdvice`가 붙은 빈을 컴포넌트 스캔으로 자동 찾아내고, `basePackages`/`assignableTypes`/`annotations` 속성으로 적용 범위를 좁힐 수 있다. mini는 `registerControllerAdvice()`로 명시적 등록만 지원하고, 범위를 좁히는 속성도 없다 - 등록한 빈은 전부 무조건 전역이다. "로컬 우선 → 전역 폴백"이라는 탐색 **순서** 자체는 이제 mini에도 있다.
@@ -203,3 +212,4 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 - **이걸로 핵심 16주 과정(IoC 컨테이너 → 빈 생명주기 → 확장점 → 컴포넌트 스캔/DI → AOP → 트랜잭션 → Spring MVC)의 코드/문서 산출물이 마무리된다.** 선택 과정(17~20주차, Spring Boot 내부)으로 넘어가기 전에, 이번 16주간의 발견을 모으는 회고 문서를 별도로 정리할 수 있다.
 - **(후기에서 추가) `MiniJsonReader`를 채우고 나서 다시 보니**: `MiniJsonWriter`(직렬화)와 `MiniJsonReader`(역직렬화)는 서로 거울 관계지만 코드 형태는 전혀 다르다 - writer는 `RecordComponent` 하나를 훑어 값을 문자열에 이어 붙이면 끝이지만, reader는 문자열 위치(`pos`)를 직접 관리하며 "지금 어떤 토큰을 기대하는가"를 스스로 추적하는 재귀 하강 파서가 필요했다. 직렬화가 "이미 존재하는 구조를 순회하며 읽어 내는" 문제인 반면 역직렬화는 "아직 존재하지 않는 구조를 문자 스트림에서 조립해 내는" 문제라서, 대칭적으로 보이는 두 기능의 구현 난이도가 실제로는 한쪽으로 크게 기운다는 것을 직접 짜 보고 체감했다.
 - **(후기에서 추가) `AnnotationExceptionResolver`에 전역 폴백을 채우고 나서**: mini-webmvc(project 27)가 5단계에 걸쳐 미뤄 뒀던 마지막 생략 하나까지 채워지면서, 10번 절의 "생략한 것" 목록에서 실제 Spring과의 의도적 차이는 캐싱 부재·`MiniJsonReader`의 record 전용 범위·`ResponseBodyAdvice`/`HandlerMethodReturnValueHandler` 미분리·advice의 컴포넌트 스캔 자동 발견 부재, 이 네 가지로 좁혀졌다 - 전부 "메커니즘 자체"가 아니라 "그 메커니즘을 실운영에 맞게 정교화하는 주변부"라는 공통점이 있다. 핵심 실행 경로(로컬 우선 → 전역 폴백, 파라미터 타입이 컨버터를 고름, 등록 순서가 우선순위)는 이제 mini에도 전부 코드로 존재한다.
+- **(후기에서 추가) 리졸버 캐시를 채우고 나니 캐시 검증 자체가 새로운 질문이었다**: "캐시를 추가했다"를 테스트로 증명하려면 캐시가 없을 때와 있을 때 관찰 가능한 차이가 있어야 하는데, 최종 결과값(응답 JSON)만 보면 캐시 유무는 전혀 드러나지 않는다 - 틀리게 캐싱해도 값은 우연히 맞을 수 있고, 캐싱을 안 해도 값은 항상 맞는다. `CountingArgumentResolver`로 `supports()` 호출 횟수 자체를 관찰 대상으로 삼고 나서야("3번 요청했는데 `supports()`는 1번만 불렸다") 캐시가 실제로 동작한다는 것을 증명할 수 있었다 - "결과가 맞다"와 "내부 동작이 의도한 경로를 탔다"는 서로 다른 명제이고, 후자를 증명하려면 종종 대상 코드를 감싸는 얇은 관찰용 레이어가 필요하다는 걸 다시 확인했다.

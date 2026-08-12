@@ -4,6 +4,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,6 +17,13 @@ public final class HandlerMethodAdapter implements HandlerAdapter {
 
     private final List<MiniArgumentResolver> argumentResolvers;
     private final List<MiniReturnValueHandler> returnValueHandlers;
+
+    // 실제 HandlerMethodArgumentResolverComposite.argumentResolverCache와 같은 캐시 -
+    // java.lang.reflect.Parameter는 선언 executable과 인덱스로 equals/hashCode가 정의돼
+    // 있어서 캐시 키로 그대로 쓸 수 있다("이 파라미터를 처리하는 리졸버가 무엇인가"는 요청마다
+    // 바뀌지 않는다). 여러 요청이 동시에 같은 HandlerMethodAdapter(싱글턴)를 거치므로
+    // ConcurrentHashMap을 쓴다.
+    private final Map<Parameter, MiniArgumentResolver> resolverCache = new ConcurrentHashMap<>();
 
     public HandlerMethodAdapter(List<MiniArgumentResolver> argumentResolvers,
             List<MiniReturnValueHandler> returnValueHandlers) {
@@ -63,9 +72,14 @@ public final class HandlerMethodAdapter implements HandlerAdapter {
     }
 
     private Object resolveArgument(Parameter parameter, HttpServletRequest request) throws Exception {
+        MiniArgumentResolver resolver = resolverCache.computeIfAbsent(parameter, this::findResolver);
+        return resolver.resolve(parameter, request);
+    }
+
+    private MiniArgumentResolver findResolver(Parameter parameter) {
         for (MiniArgumentResolver resolver : argumentResolvers) {
             if (resolver.supports(parameter)) {
-                return resolver.resolve(parameter, request);
+                return resolver;
             }
         }
         throw new IllegalStateException("no ArgumentResolver for parameter: " + parameter);
