@@ -126,6 +126,31 @@ class MiniDispatcherServletTest {
     }
 
     @Test
+    void requestBodyIsDeserializedIntoARecordAndEchoedBackAsJson() throws Exception {
+        HttpServletRequest request = FakeHttpServletRequest.createWithBody(
+                "POST", "/api/users", "{\"id\":7,\"detail\":true}");
+        FakeHttpServletResponse.Fake response = FakeHttpServletResponse.create();
+
+        dispatcherServlet.service(request, response.response());
+
+        assertThat(response.state().status()).isEqualTo(200);
+        assertThat(response.state().body()).isEqualTo("{\"id\":7,\"detail\":true}");
+    }
+
+    @Test
+    void requestBodyWithANestedRecordFieldIsDeserializedRecursively() throws Exception {
+        HttpServletRequest request = FakeHttpServletRequest.createWithBody("POST", "/api/users/with-address",
+                "{\"id\":1,\"name\":\"ada\",\"address\":{\"street\":\"1 Infinite Loop\",\"city\":\"Cupertino\"}}");
+        FakeHttpServletResponse.Fake response = FakeHttpServletResponse.create();
+
+        dispatcherServlet.service(request, response.response());
+
+        assertThat(response.state().status()).isEqualTo(200);
+        assertThat(response.state().body())
+                .isEqualTo("{\"id\":1,\"name\":\"ada\",\"address\":{\"street\":\"1 Infinite Loop\",\"city\":\"Cupertino\"}}");
+    }
+
+    @Test
     void responseEntityControlsTheStatusCode() throws Exception {
         HttpServletRequest request = FakeHttpServletRequest.create("GET", "/api/users/wrapped");
         FakeHttpServletResponse.Fake response = FakeHttpServletResponse.create();

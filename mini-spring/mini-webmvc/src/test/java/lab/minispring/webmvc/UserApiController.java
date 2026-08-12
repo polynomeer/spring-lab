@@ -13,6 +13,16 @@ class UserApiController {
         return "received:" + body;
     }
 
+    @MiniRequestMapping(path = "/api/users", method = "POST")
+    public UserPayload create(@MiniRequestBody UserPayload payload) {
+        return payload;
+    }
+
+    @MiniRequestMapping(path = "/api/users/with-address", method = "POST")
+    public UserWithAddressPayload createWithAddress(@MiniRequestBody UserWithAddressPayload payload) {
+        return payload;
+    }
+
     @MiniRequestMapping(path = "/api/users/wrapped", method = "GET")
     public MiniResponseEntity<UserPayload> wrapped() {
         return MiniResponseEntity.status(201, new UserPayload(999, false));

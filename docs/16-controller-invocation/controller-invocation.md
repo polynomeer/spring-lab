@@ -2,6 +2,8 @@
 
 [`docs/plan/01-roadmap.md`](../plan/01-roadmap.md) 16주차, [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md) 프로젝트 25(Custom Argument Resolver)·26(Custom Return Value Handler)·27(Mini Web MVC, 4~6단계)에 대응하는 분석 문서다. 이 문서로 핵심 16주 과정의 코드/문서 산출물이 마무리된다.
 
+**후기**: 10번 절은 원래 "JSON 역직렬화가 없다 - `@MiniRequestBody`는 원문 문자열만 바인딩한다"를 의도적 생략으로 남겨 뒀었다(`docs/retrospective/retrospective.md` 7번 절 "남겨 둔 질문"). mini-aop의 CGLIB 상당 서브클래스 프록시, mini-transaction의 `NESTED` 전파를 채운 뒤 그 생략도 채웠다 - `mini-spring/mini-webmvc`에 record 전용 `MiniJsonReader`를 추가하고 `RequestBodyArgumentResolver`가 파라미터 타입(`String` vs record)에 따라 원문 문자열 바인딩과 JSON 역직렬화 중 하나를 고르도록 바꿨다. 8·10·11·12번 절에 그 내용을 반영했다.
+
 ## 1. 이번 질문
 
 - 컨트롤러 메서드의 파라미터는 어떻게 실제 값으로 채워지는가 - 여러 `ArgumentResolver` 후보가 있으면 무엇이 이기는가?
@@ -126,15 +128,29 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 | `@WrapInApiResponse` 메서드(수동 `ReturnValueHandler`) | 정확히 한 번 래핑됨 - 이 경로는 `ApiResponseBodyAdvice`를 타지 않음(적용됐다면 이중 래핑) |
 | 애노테이션 없는 메서드(기본 `@ResponseBody` 경로) | `ApiResponseBodyAdvice`가 적용되어 정확히 한 번 래핑됨 |
 
-[`MiniDispatcherServletTest`](../../mini-spring/mini-webmvc/src/test/java/lab/minispring/webmvc/MiniDispatcherServletTest.java) (10개, 이번 주 5개 추가):
+[`MiniDispatcherServletTest`](../../mini-spring/mini-webmvc/src/test/java/lab/minispring/webmvc/MiniDispatcherServletTest.java) (12개, 이번 주 5개 + 후기에서 추가한 JSON 역직렬화 2개):
 
 | 실험 | 결과 |
 | --- | --- |
 | `@MiniPathVariable` + `@MiniRequestParam(required=false)` | 경로 변수와 쿼리 파라미터가 함께 해석되어 record JSON으로 직렬화 |
 | 선택적 파라미터 누락 | `null` → 타입 변환 스킵, 컨트롤러가 `false`로 처리 |
-| `@MiniRequestBody` | 요청 본문 원문 문자열이 그대로 바인딩 |
+| `@MiniRequestBody String` | 요청 본문 원문 문자열이 그대로 바인딩 |
+| (후기) `@MiniRequestBody UserPayload`(record) | JSON 본문이 `MiniJsonReader`로 역직렬화되어 record로 바인딩, 그대로 다시 JSON으로 직렬화되어 응답 |
+| (후기) `@MiniRequestBody UserWithAddressPayload`(중첩 record) | 중첩된 JSON 객체가 재귀적으로 역직렬화됨 |
 | `MiniResponseEntity` 반환 | 지정한 상태 코드(201)로 응답 |
 | 같은 컨트롤러의 `@MiniExceptionHandler` | 500 대신 그 메서드가 만든 응답으로 대체 |
+
+(후기) [`MiniJsonReaderTest`](../../mini-spring/mini-webmvc/src/test/java/lab/minispring/webmvc/MiniJsonReaderTest.java) (10개, 파서 단위 테스트):
+
+| 실험 | 결과 |
+| --- | --- |
+| 평범한 record, 필드 순서가 JSON과 다름 | 이름으로 매칭되므로 순서 무관하게 정상 바인딩 |
+| 필드 누락 | 프리미티브 필드는 기본값(`0`/`false`)으로 채워짐 |
+| 대상 record에 없는 알 수 없는 필드(스칼라/중첩 객체/배열) | 조용히 건너뜀 - Jackson의 기본값(실패)과 다른 의도적 선택 |
+| 중첩 record | 재귀적으로 역직렬화 |
+| 이스케이프 시퀀스(`\n`, `\uXXXX` 등) | 정확히 디코딩 |
+| 객체를 record가 아닌 타입에 역직렬화 시도 | `IllegalArgumentException` |
+| 중괄호가 안 닫힌 채 끝나는/값 뒤에 남는 문자가 있는 JSON | `IllegalArgumentException` |
 
 **직접 겪은 버그**: `@MiniPathVariable`을 추가하면서 `/api/users/{id}`와 `/api/users/wrapped`를 같은 컨트롤러에 등록했는데, `Class#getMethods()`의 순회 순서가 보장되지 않아 `{id}` 패턴이 `wrapped()`보다 먼저 등록되는 경우 `id="wrapped"`로 해석되어 `NumberFormatException`(500)이 났다 - 15주차 real-Spring 실험에서 확인한 리터럴 vs 변수 경로 specificity 문제를 mini에서 그대로 재현한 것이었다. 변수 세그먼트 개수로 정렬해 리터럴 패턴을 먼저 검사하도록 고쳤다(10번에서 자세히).
 
@@ -152,14 +168,15 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 `mini-spring/mini-webmvc`(project 27) — 이번 주에 4~6단계(ArgumentResolver, ReturnValueHandler, ExceptionResolver)를 마무리해서 project 27을 완료했다.
 
 **구현한 것**
-- `MiniArgumentResolver` 체인: `@MiniPathVariable`, `@MiniRequestParam`(필수/선택), `@MiniRequestBody`(원문 문자열), 애노테이션 없는 `HttpServletRequest`
+- `MiniArgumentResolver` 체인: `@MiniPathVariable`, `@MiniRequestParam`(필수/선택), `@MiniRequestBody`(`String` 원문 또는 record JSON 역직렬화), 애노테이션 없는 `HttpServletRequest`
 - `MiniReturnValueHandler` 체인: `String`, `MiniResponseEntity`(상태 코드 제어), 그 외 타입을 위한 리플렉션 기반 최소 JSON writer(`record`만 지원)
 - `AnnotationExceptionResolver`: 예외를 던진 핸들러와 **같은 빈**에서 `@MiniExceptionHandler`를 찾아 대신 호출
 - 경로 변수 추출을 위한 `AnnotationHandlerMapping`의 패턴 매칭 확장 + specificity 정렬(리터럴 우선)
+- **(후기에서 추가) `MiniJsonReader`**: `MiniJsonWriter`의 반대편 - record 하나로만(중첩 record는 재귀로) 역직렬화하는 손으로 짠 재귀 하강 파서. `RequestBodyArgumentResolver`가 대상 파라미터 타입을 보고 `String`이면 원문을, record면 `MiniJsonReader.read(body, type)`의 결과를 넘긴다 - 실제 Spring이 `StringHttpMessageConverter`/`MappingJackson2HttpMessageConverter` 중 대상 타입에 맞는 컨버터를 고르는 지점과 같다.
 
 **생략한 것 (의도적)**
 - **리졸버 매칭 결과 캐싱이 없다** - 실제 `HandlerMethodArgumentResolverComposite`는 `Map<MethodParameter, HandlerMethodArgumentResolver>`로 한 번 찾은 결과를 캐싱해서 매 요청마다 리졸버 목록을 처음부터 다시 훑지 않는다. mini는 매번 처음부터 순회한다 - 정확성에는 영향 없지만 실제라면 요청마다 반복되는 비용이다.
-- **JSON 역직렬화가 없다** - `@MiniRequestBody`는 원문 문자열만 바인딩한다. 실제 Jackson 기반 역직렬화는 이번 주 real-Spring 실험(project 25/26)에서 이미 다뤘다.
+- **`MiniJsonReader`는 record 전용이다** - 리스트/맵/제네릭/커스텀 역직렬화 규칙은 다루지 않는다(`MiniJsonWriter`가 record만 직렬화하는 것과 대칭). 알 수 없는 JSON 필드는 조용히 건너뛴다 - Jackson의 기본값(`FAIL_ON_UNKNOWN_PROPERTIES=true`)과 다른 의도적으로 관대한 선택이다. 실제 Jackson 기반 역직렬화는 이번 주 real-Spring 실험(project 25/26)에서 이미 다뤘다.
 - **`ResponseBodyAdvice` 상당 확장점이 없다** - mini의 `MiniReturnValueHandler`는 실제 `HandlerMethodReturnValueHandler`와 `ResponseBodyAdvice`를 하나로 합친 형태다. 이 둘을 분리하지 않았으므로, project 26에서 확인한 "수동 처리기가 advice를 우회한다"는 함정 자체가 mini에는 없다(애초에 그 두 확장점이 분리돼 있지 않아서 생기지 않는 문제다).
 - **`@ControllerAdvice` 상당(다른 컨트롤러의 예외까지 전역으로 처리)이 없다** - `AnnotationExceptionResolver`는 같은 빈 안에서만 찾는다. 실제 Spring의 2단계 탐색(로컬 우선 → 전역 폴백) 중 첫 단계만 구현했다.
 
@@ -169,6 +186,7 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 - **왜 리졸버 우선순위가 "더 구체적인 것"이 아니라 "먼저 등록된 것"인가**: "구체성"을 자동으로 판단하려면 리졸버들 사이에 어떤 공통 기준(예: 애노테이션의 특정도, 타입의 특정도)이 있어야 하는데, 서로 다른 종류의 리졸버(애노테이션 기반, 타입 기반, 커스텀)를 하나의 기준으로 비교할 보편적인 방법이 없다. 대신 Spring은 "등록 순서가 곧 우선순위"라는 단순하고 예측 가능한 규칙을 택했다 - 사용자는 `WebMvcConfigurer#addArgumentResolvers()`에 원하는 순서로 커스텀 리졸버를 추가하기만 하면, 그 순서가 곧 우선순위가 된다는 것을 확신할 수 있다.
 - **왜 `ResponseBodyAdvice`는 `HandlerMethodReturnValueHandler`와 별개의, 더 작은 확장점으로 분리돼 있는가**: `HandlerMethodReturnValueHandler`를 새로 만드는 것은 "이 반환 타입을 통째로 어떻게 처리할지"를 처음부터 다시 결정하는 무거운 작업이다(우리 `ApiResponseReturnValueHandler`가 메시지 변환기 목록까지 직접 구성해야 했던 것처럼). 반면 "이미 `@ResponseBody`로 처리되고 있는 응답의 본문만 살짝 바꾸고 싶다"는 훨씬 흔한 요구에는 그런 무거운 재구현이 필요 없어야 한다. `ResponseBodyAdvice`는 정확히 이 좁은 요구를 위해, 기존 처리 파이프라인 안에 끼어드는 더 가벼운 확장점으로 분리됐다 - 우리가 겪은 "수동 `ReturnValueHandler`는 advice를 우회한다"는 함정은, 이 분리를 정확히 이해하지 못하면 밟게 되는 자연스러운 발이다.
 - **왜 `@ExceptionHandler`는 같은 컨트롤러를 `@ControllerAdvice`보다 먼저 검사하는가**: 컨트롤러 작성자가 자신의 클래스 안에 직접 `@ExceptionHandler`를 선언했다면, 그것은 "이 컨트롤러만의 특별한 처리가 필요하다"는 명시적 의도다. 전역 `@ControllerAdvice`가 이보다 먼저 개입한다면, 컨트롤러 작성자가 직접 선언한 처리 로직이 예상치 못하게 무시될 수 있다 - "더 지역적이고 구체적인 선언이 전역 규칙보다 우선한다"는 원칙은 이 문서 전체에서(리터럴 vs 변수 경로, self-invocation 등) 여러 번 등장한 것과 같은 종류의 설계 판단이다.
+- **(후기에서 추가) 왜 `HttpMessageConverter` 선택은 대상 파라미터 타입을 보고 결정되는가**: `@RequestBody`가 붙은 파라미터가 "본문을 어떻게 해석해야 하는지"를 말해 주는 유일한 단서는 그 파라미터의 선언된 타입뿐이다 - 요청 헤더의 `Content-Type`은 실제로 그 값인지 신뢰할 수 없고(클라이언트가 틀리게 보낼 수 있다), 본문 자체를 먼저 파싱해 보지 않고는 형태를 알 수 없다. `RequestBodyArgumentResolver`가 `targetType == String.class`면 원문을, record면 `MiniJsonReader`를 고르는 것은 실제 `HttpMessageConverter` 목록에서 `canRead(type, mediaType)`이 대상 타입을 우선 기준으로 컨버터를 고르는 것과 같은 지점이다 - "무엇으로 변환할지"는 항상 목적지 타입이 결정한다.
 
 ## 12. 결론 (예상과 실제의 차이)
 
@@ -177,3 +195,4 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 - 예상대로였던 것(재확인): `@ExceptionHandler`가 같은 컨트롤러를 먼저 찾는다는 것, 반환값 처리가 "무엇을 할지 결정"과 "실제로 직렬화"의 2단계로 나뉜다는 것 - 레퍼런스 문서에 설명된 그대로였다.
 - Mini 구현이 보여준 것: 경로 변수를 추가하자마자 15주차에서 다뤘던 리터럴/변수 경로 우선순위 문제가 그대로 재발했다 - 매주 배운 교훈이 다음 주 구현에서 그냥 사라지는 게 아니라, 새로운 기능을 추가할 때마다 실제로 다시 검증해야 하는 살아있는 제약이라는 것을 보여준 사례다.
 - **이걸로 핵심 16주 과정(IoC 컨테이너 → 빈 생명주기 → 확장점 → 컴포넌트 스캔/DI → AOP → 트랜잭션 → Spring MVC)의 코드/문서 산출물이 마무리된다.** 선택 과정(17~20주차, Spring Boot 내부)으로 넘어가기 전에, 이번 16주간의 발견을 모으는 회고 문서를 별도로 정리할 수 있다.
+- **(후기에서 추가) `MiniJsonReader`를 채우고 나서 다시 보니**: `MiniJsonWriter`(직렬화)와 `MiniJsonReader`(역직렬화)는 서로 거울 관계지만 코드 형태는 전혀 다르다 - writer는 `RecordComponent` 하나를 훑어 값을 문자열에 이어 붙이면 끝이지만, reader는 문자열 위치(`pos`)를 직접 관리하며 "지금 어떤 토큰을 기대하는가"를 스스로 추적하는 재귀 하강 파서가 필요했다. 직렬화가 "이미 존재하는 구조를 순회하며 읽어 내는" 문제인 반면 역직렬화는 "아직 존재하지 않는 구조를 문자 스트림에서 조립해 내는" 문제라서, 대칭적으로 보이는 두 기능의 구현 난이도가 실제로는 한쪽으로 크게 기운다는 것을 직접 짜 보고 체감했다.

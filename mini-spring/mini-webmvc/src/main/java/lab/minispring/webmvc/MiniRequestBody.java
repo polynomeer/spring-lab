@@ -5,10 +5,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-// 실제 Spring과 달리 JSON 역직렬화는 하지 않는다 - 요청 본문을 문자열 그대로 바인딩한다
-// (Jackson 같은 외부 라이브러리 없이도 "본문을 한 번 읽어서 인자로 넘긴다"는 핵심 메커니즘은
-// 그대로 보여줄 수 있다. 실제 JSON 변환은 이번 주 real-Spring 실험(project 25/26)에서 이미
-// Jackson으로 확인했다).
+// 대상 파라미터 타입으로 바인딩 방식을 가른다: String이면 본문을 그대로, record면
+// MiniJsonReader로 역직렬화한다 - 실제 Spring이 HttpMessageConverter 목록에서 타입에 맞는
+// 컨버터를 고르는 지점과 같다. Jackson 없이 record 전용으로 축소했을 뿐 (중첩 record까지는
+// 지원, 리스트/맵/제네릭은 지원하지 않음) - 실제 Jackson 기반 역직렬화는 이번 주 real-Spring
+// 실험(project 25/26)에서 이미 확인했다.
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface MiniRequestBody {

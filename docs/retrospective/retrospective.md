@@ -162,7 +162,7 @@ mini-webmvc (15~16주차, project 27)
 의도적으로 범위 밖에 둔 것들(각 문서 10번 절에 기록됨) 중 특히 다시 다뤄볼 만한 것:
 
 **핵심 16주에서**
-- mini 구현들의 일관된 생략: JSON 실제 역직렬화(mini-webmvc), ~~CGLIB 상당 서브클래스 프록시(mini-aop)~~, ~~NESTED 전파(mini-transaction)~~, `@ControllerAdvice` 전역 예외 처리(mini-webmvc) - 전부 "핵심 메커니즘을 이해하는 데는 필요 없었던" 것들이다. CGLIB 상당 서브클래스 프록시는 11번 절, NESTED 전파는 12번 절에 적었듯 이후에 마쳤다 - 나머지 두 개는 여전히 미착수다.
+- mini 구현들의 일관된 생략: ~~JSON 실제 역직렬화(mini-webmvc)~~, ~~CGLIB 상당 서브클래스 프록시(mini-aop)~~, ~~NESTED 전파(mini-transaction)~~, `@ControllerAdvice` 전역 예외 처리(mini-webmvc) - 전부 "핵심 메커니즘을 이해하는 데는 필요 없었던" 것들이다. CGLIB 상당 서브클래스 프록시는 11번 절, NESTED 전파는 12번 절, JSON 역직렬화는 13번 절에 적었듯 이후에 마쳤다 - 나머지 하나(`@ControllerAdvice` 전역 예외 처리)는 여전히 미착수다.
 - 7주차에서 남긴 ASM 기반 컴포넌트 스캔의 실제 성능/안전성 비교는 시도하지 않았다.
 - 16주차에서 발견한 mini-webmvc의 인자 리졸버 캐싱 부재는 정확성에는 영향 없지만 실제라면 성능 이슈가 됐을 것이다.
 
@@ -272,3 +272,13 @@ Phase 1~5는 각자 새 개념 하나씩을 새 코드로 검증하는 식이라
 **`REQUIRED`와 `NESTED`는 정반대 결정을 한 곳에서 내린다.** `JdbcMiniTransactionManager.rollback()`은 참여자의 실패를 처리하는 메서드 하나인데, 그 안에서 `REQUIRED` 참여자는 반드시 `holder.markRollbackOnly()`를 호출해야 하고 `NESTED` 참여자는 반드시 호출하면 안 된다 - 같은 실패를 owner에게 "반드시 알려야 하는 것"과 "알리면 안 되는 것"으로 정반대로 다룬다. 이미 있던 `participantFailureMarksRollbackOnlySoOwnerCommitRollsBackAndThrows` 테스트와 정확히 같은 시나리오(facade가 두 번째 이체 실패를 삼킴)를 전파 속성만 바꿔 다시 돌려서(`nestedParticipantFailureDoesNotPreventTheOwnerFromCommittingNormallyUnlikeRequired`) - 결과가 "예외 + 잔액 원상복구"에서 "예외 없음 + 첫 이체만 반영"으로 뒤집히는 걸 직접 확인했다.
 
 저장소 전체 자동화 테스트는 344개에서 348개가 됐다.
+
+## 13. 남겨 둔 질문 세 번째 — mini-webmvc의 JSON 역직렬화
+
+7번 절 목록의 세 번째 항목을 채웠다: `mini-spring/mini-webmvc`에 record 전용 `MiniJsonReader`를 추가하고, `RequestBodyArgumentResolver`가 파라미터 타입(`String` vs record)을 보고 원문 문자열 바인딩과 JSON 역직렬화 중 하나를 고르게 했다. 상세 내용은 [`docs/16-controller-invocation/controller-invocation.md`](../16-controller-invocation/controller-invocation.md)의 후기(8·10·11·12번 절)에 반영했다 - 이 절은 그중 반복해서 배울 만한 것만 추린다.
+
+**직렬화와 역직렬화는 거울 관계가 아니었다.** `MiniJsonWriter`(직렬화)는 이미 있는 `record` 인스턴스를 `RecordComponent`로 순회하며 문자열에 이어 붙이면 끝나는, 20줄 남짓한 코드다. 반면 `MiniJsonReader`(역직렬화)는 문자열 위치(`pos`)를 스스로 추적하며 "지금 어떤 토큰이 와야 하는가"를 판단하는 재귀 하강 파서가 필요했다 - 이스케이프 시퀀스, 알 수 없는 필드를 건너뛰기 위한 중첩 괄호 추적, 문자열 안의 괄호는 세지 않기 위한 특별 취급까지, 코드량이 5배 넘게 늘었다. "쓰기가 되면 읽기는 그 반대만 하면 된다"는 짐작이 구현 난이도 앞에서는 전혀 대칭적이지 않다는 걸 직접 짜 보고서야 체감했다 - 이미 존재하는 구조를 순회하는 것과, 문자 스트림에서 아직 존재하지 않는 구조를 조립해 내는 것은 근본적으로 다른 문제였다.
+
+**"목적지 타입이 변환기를 고른다"는 원칙이 여기서도 반복됐다.** `RequestBodyArgumentResolver`가 `@MiniRequestBody`가 붙은 파라미터의 선언된 타입만 보고 원문 문자열 경로와 `MiniJsonReader` 경로를 가르는 것은, 실제 Spring의 `HttpMessageConverter` 목록이 `canRead(type, mediaType)`으로 대상 타입에 맞는 컨버터를 고르는 것과 같은 지점이다 - `Content-Type` 헤더는 클라이언트가 잘못 보낼 수 있어 신뢰할 수 없고, 본문은 파싱해 보기 전엔 형태를 알 수 없으니, 남는 유일하게 믿을 수 있는 단서는 코드에 선언된 목적지 타입뿐이라는 것이다.
+
+저장소 전체 자동화 테스트는 348개에서 360개가 됐다.
