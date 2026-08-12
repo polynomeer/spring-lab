@@ -1,6 +1,7 @@
 package lab.ext.observability.autoconfigure;
 
-import lab.ext.observability.core.ObservationLog;
+import io.micrometer.observation.ObservationRegistry;
+
 import lab.ext.observability.core.RequestObservationInterceptor;
 import lab.ext.observability.core.RequestObservationProperties;
 
@@ -22,10 +23,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @EnableConfigurationProperties(RequestObservationProperties.class)
 public class RequestObservationAutoConfiguration {
 
+    // 실제 Spring Boot의 ObservationAutoConfiguration(spring-boot-actuator-autoconfigure)과
+    // 같은 지점 - 애플리케이션이 이미 (예: actuator를 통해) ObservationRegistry를 갖고 있으면
+    // 이 빈은 물러나고 그 레지스트리를 그대로 공유한다.
     @Bean
     @ConditionalOnMissingBean
-    public ObservationLog observationLog() {
-        return new ObservationLog();
+    public ObservationRegistry observationRegistry() {
+        return ObservationRegistry.create();
     }
 
     // enabled=false면 이 빈 자체가 등록되지 않는다 - 인터셉터를 실제로 등록하는 아래
@@ -36,8 +40,8 @@ public class RequestObservationAutoConfiguration {
     @ConditionalOnProperty(prefix = "request-observation", name = "enabled", havingValue = "true",
             matchIfMissing = true)
     public RequestObservationInterceptor requestObservationInterceptor(RequestObservationProperties properties,
-            ObservationLog observationLog) {
-        return new RequestObservationInterceptor(properties, observationLog);
+            ObservationRegistry observationRegistry) {
+        return new RequestObservationInterceptor(properties, observationRegistry);
     }
 
     @Bean

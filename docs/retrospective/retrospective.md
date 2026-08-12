@@ -168,7 +168,7 @@ mini-webmvc (15~16주차, project 27)
 
 **선택 4주에서**
 - 17주차에서 미룬 "웹 서버가 실제로 언제 뜨는가"는 자동 설정(18주차) 없이는 관찰할 수 없어서 미뤘는데, 20주차에서 실제 웹 자동 설정을 통합했지만 이 관찰 자체는 별도로 다시 다루지 않았다.
-- 20주차의 `mini-observability-starter`는 실제 Micrometer `ObservationRegistry` 연동 대신 인메모리 `ObservationLog`로 단순화했다 - 관찰 결과를 테스트에서 직접 조회하기 위한 의도적 선택이었지만, 실제 프로덕션 스타터라면 이 자리가 핵심이다.
+- ~~20주차의 `mini-observability-starter`는 실제 Micrometer `ObservationRegistry` 연동 대신 인메모리 `ObservationLog`로 단순화했다 - 관찰 결과를 테스트에서 직접 조회하기 위한 의도적 선택이었지만, 실제 프로덕션 스타터라면 이 자리가 핵심이다.~~ — 16번 절에 적었듯 이후에 마쳤다.
 - ~~카탈로그의 project 23(Transactional Outbox), 28(Error Handling Pipeline), 29~30(Application Event Bus/Mini Event Multicaster)는 여전히 미착수다~~ — 8번 절에 적었듯 넷 다 이후에 마쳤다. 이벤트 시스템과 예외 처리 파이프라인을 이번 20주 어디에서도 전용 주제로 다루지 않았다는 관찰 자체는 (그 시점 기준으로는) 정확했다.
 
 이것으로 로드맵의 20주 전체(핵심 16주 + 선택 4주)가 마무리된다. 남은 것은 위 목록의 개별 항목들을 골라 더 깊이 파는 것뿐이다 — 그중 상당수를 실제로 이어간 기록이 8번 절에 있다.
@@ -306,3 +306,15 @@ Phase 1~5는 각자 새 개념 하나씩을 새 코드로 검증하는 식이라
 이것으로 7번 절 "남겨 둔 질문"의 "핵심 16주에서" 목록 중 남은 항목은 7주차의 ASM 기반 컴포넌트 스캔 비교 하나뿐이다. "선택 4주에서" 목록의 두 항목(17주차 웹 서버 기동 시점 관찰, 20주차 실제 Micrometer 연동)도 여전히 남아 있다.
 
 저장소 전체 자동화 테스트는 362개에서 364개가 됐다.
+
+## 16. 남겨 둔 질문 — 20주차 mini-observability-starter의 실제 Micrometer 연동
+
+7번 절 "선택 4주에서" 목록의 한 항목을 채웠다: `mini-observability-starter`의 `ObservationLog`/`ObservationEntry`(인메모리 로그)를 완전히 걷어내고, `RequestObservationInterceptor`가 실제 `io.micrometer.observation.Observation`/`ObservationRegistry`를 직접 쓰도록 바꿨다. `RequestObservationAutoConfiguration`도 실제 Spring Boot의 `ObservationAutoConfiguration`과 같은 자리에 `ObservationRegistry` 빈을 `@ConditionalOnMissingBean`으로 추가했다. 상세 내용은 [`docs/20-custom-starter/custom-starter.md`](../20-custom-starter/custom-starter.md)의 후기(5·6·8·10·11·12번 절)에 반영했다 - 이 절은 그중 반복해서 배울 만한 것만 추린다.
+
+**커스텀 빈을 실제 SPI 구현으로 바꾸자 테스트의 성격이 바뀌었다.** `ObservationLog`가 있을 때 테스트는 그냥 우리가 만든 빈을 조회하면 그만이었다. `ObservationLog`를 걷어낸 뒤에는, Micrometer가 실제로 제공하는 확장점인 `ObservationHandler<Observation.Context>`를 테스트가 직접 구현(`CapturingObservationHandler`)해서 `ObservationRegistry`에 등록해 둬야 했다 - 이 저장소가 이미 여러 번 써 온 "얇은 계측 레이어로 내부 동작을 관찰한다"는 패턴(15번 절의 `CountingArgumentResolver`)이지만, 이번엔 그 레이어가 우리가 지어낸 인터페이스가 아니라 Micrometer 자신이 공개한 확장점이라는 점이 다르다 - 프로덕션 코드가 실제 SPI를 쓰게 되니, 그걸 검증하는 테스트도 자연스럽게 그 SPI를 통하게 됐다.
+
+**멀티모듈에서 "공개 API에 노출되는 타입"이라는 개념을 다시 확인했다.** `docs/20-custom-starter/custom-starter.md` 3번 절이 이미 "`implementation`으로는 전이적으로 노출되지 않는다"를 겪었던 자리인데, 이번엔 그 반대 방향의 확인이었다 - `autoconfigure`의 `@Bean ObservationRegistry observationRegistry()`가 그 타입을 공개 API로 노출하므로, `micrometer-observation`을 `api`로 선언해야 `starter`를 거쳐 세 단계 떨어진 `sample-app/mini-order-platform`의 테스트 코드도 `ObservationRegistry`를 직접 참조할 수 있었다. 처음부터 이 규칙을 알고 `api`로 선언했더니, 실제로 `mini-order-platform` 쪽에는 새 의존성 선언이 단 한 줄도 필요 없었다 - 3번 절 때는 실패를 먼저 겪고 규칙을 확인했지만, 이번엔 규칙을 먼저 적용해서 실패 자체를 만들지 않았다는 차이가 있다.
+
+**조건부 등록이 인터셉터 자신뿐 아니라 그 인터셉터가 의존하는 인프라에도 그대로 적용됐다.** `RequestObservationInterceptor`(19주차부터 있던 `@ConditionalOnMissingBean`)에 이어 `ObservationRegistry`에도 같은 패턴을 적용하면서, "사용자가 이미 `ObservationRegistry`를 갖고 있으면(예: actuator) 그걸 그대로 공유한다"는 새 시나리오가 하나 더 생겼다 - `userDefinedObservationRegistryMakesTheAutoConfigurationBackOffAndIsSharedWithTheInterceptor` 테스트로 확인했듯, 자동 설정이 물러날 뿐 아니라 인터셉터도 그 사용자 레지스트리를 그대로 주입받는다.
+
+저장소 전체 자동화 테스트는 364개에서 366개가 됐다. 이것으로 7번 절 "선택 4주에서" 목록은 20주차 Micrometer 연동 항목이 채워지고, 17주차 웹 서버 기동 시점 관찰 하나만 남았다.

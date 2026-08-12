@@ -1,0 +1,28 @@
+package lab.sampleapp.orderplatform.boot;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationHandler;
+
+// spring-extensions/mini-observability-starter의 동명 테스트 지원 클래스와 같은 역할 -
+// 모듈별 테스트 소스셋이 분리돼 있어 공유할 수 없으므로 그대로 복제했다.
+final class CapturingObservationHandler implements ObservationHandler<Observation.Context> {
+
+    private final List<Observation.Context> completed = new ArrayList<>();
+
+    @Override
+    public boolean supportsContext(Observation.Context context) {
+        return true;
+    }
+
+    @Override
+    public void onStop(Observation.Context context) {
+        completed.add(context);
+    }
+
+    List<Observation.Context> completedObservations() {
+        return List.copyOf(completed);
+    }
+}
