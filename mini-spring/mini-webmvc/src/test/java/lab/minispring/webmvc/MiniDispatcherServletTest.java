@@ -30,10 +30,13 @@ class MiniDispatcherServletTest {
                 new ResponseEntityReturnValueHandler(),
                 new JsonReturnValueHandler());
 
+        AnnotationExceptionResolver exceptionResolver = new AnnotationExceptionResolver(returnValueHandlers);
+        exceptionResolver.registerControllerAdvice(new GlobalExceptionAdvice());
+
         dispatcherServlet = new MiniDispatcherServlet();
         dispatcherServlet.addHandlerMapping(mapping);
         dispatcherServlet.addHandlerAdapter(new HandlerMethodAdapter(argumentResolvers, returnValueHandlers));
-        dispatcherServlet.addExceptionResolver(new AnnotationExceptionResolver(returnValueHandlers));
+        dispatcherServlet.addExceptionResolver(exceptionResolver);
     }
 
     @Test
@@ -171,5 +174,29 @@ class MiniDispatcherServletTest {
         // 500이 아니라, @MiniExceptionHandler가 정상적으로 응답을 만들어 낸다.
         assertThat(response.state().status()).isEqualTo(200);
         assertThat(response.state().body()).isEqualTo("handled: controller exploded");
+    }
+
+    @Test
+    void globalControllerAdviceHandlesAnExceptionWithNoLocalHandler() throws Exception {
+        HttpServletRequest request = FakeHttpServletRequest.create("GET", "/api/users/boom-unhandled-locally");
+        FakeHttpServletResponse.Fake response = FakeHttpServletResponse.create();
+
+        dispatcherServlet.service(request, response.response());
+
+        assertThat(response.state().status()).isEqualTo(200);
+        assertThat(response.state().body()).isEqualTo("global: no local handler for this one");
+    }
+
+    @Test
+    void sameBeanExceptionHandlerIsCheckedBeforeGlobalControllerAdviceForTheSameExceptionType() throws Exception {
+        HttpServletRequest request = FakeHttpServletRequest.create("GET", "/api/users/boom-both");
+        FakeHttpServletResponse.Fake response = FakeHttpServletResponse.create();
+
+        dispatcherServlet.service(request, response.response());
+
+        // UserApiController와 GlobalExceptionAdvice가 둘 다 NullPointerException을 처리할 수
+        // 있지만, 같은 빈(로컬)이 항상 먼저 검사되어 이긴다.
+        assertThat(response.state().status()).isEqualTo(200);
+        assertThat(response.state().body()).isEqualTo("local-npe: both handle this");
     }
 }

@@ -4,6 +4,8 @@
 
 **후기**: 10번 절은 원래 "JSON 역직렬화가 없다 - `@MiniRequestBody`는 원문 문자열만 바인딩한다"를 의도적 생략으로 남겨 뒀었다(`docs/retrospective/retrospective.md` 7번 절 "남겨 둔 질문"). mini-aop의 CGLIB 상당 서브클래스 프록시, mini-transaction의 `NESTED` 전파를 채운 뒤 그 생략도 채웠다 - `mini-spring/mini-webmvc`에 record 전용 `MiniJsonReader`를 추가하고 `RequestBodyArgumentResolver`가 파라미터 타입(`String` vs record)에 따라 원문 문자열 바인딩과 JSON 역직렬화 중 하나를 고르도록 바꿨다. 8·10·11·12번 절에 그 내용을 반영했다.
 
+**후기 두 번째**: 10번 절이 남겨 뒀던 마지막 생략 - "`@ControllerAdvice` 상당(다른 컨트롤러의 예외까지 전역으로 처리)이 없다 - `AnnotationExceptionResolver`는 같은 빈 안에서만 찾는다" - 도 채웠다. `AnnotationExceptionResolver`에 `registerControllerAdvice(Object)`를 추가해서, 같은 빈에서 못 찾으면 등록해 둔 전역 advice 빈들을(등록 순서대로) 폴백으로 검사하게 했다. 5·8·10번 절에 그 내용을 반영했다.
+
 ## 1. 이번 질문
 
 - 컨트롤러 메서드의 파라미터는 어떻게 실제 값으로 채워지는가 - 여러 `ArgumentResolver` 후보가 있으면 무엇이 이기는가?
@@ -65,7 +67,7 @@ private Object[] resolveArguments(Method method, HttpServletRequest request) thr
 | `RequestResponseBodyMethodProcessor` | `@RequestBody`/`@ResponseBody`를 함께 처리 - 생성자에 advice 목록을 넘기지 않으면 advice 자체가 비활성화됨 |
 | `ExceptionHandlerExceptionResolver` | 예외를 던진 컨트롤러의 클래스에서 먼저 `@ExceptionHandler`를 찾고, 없으면 `@ControllerAdvice` 빈들에서 찾음 |
 | (mini) `MiniArgumentResolver`/`MiniReturnValueHandler` | 실제 타입과 이름·역할 대응 - 캐싱은 생략 |
-| (mini) `AnnotationExceptionResolver` | 같은 빈 안에서만 `@MiniExceptionHandler`를 찾음 - `@ControllerAdvice` 상당 기능은 생략 |
+| (mini) `AnnotationExceptionResolver` | 같은 빈에서 먼저 `@MiniExceptionHandler`를 찾고, 없으면 `registerControllerAdvice()`로 등록해 둔 전역 빈들을 폴백으로 찾음(후기에서 추가) |
 
 ## 6. 호출 흐름
 
@@ -128,7 +130,7 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 | `@WrapInApiResponse` 메서드(수동 `ReturnValueHandler`) | 정확히 한 번 래핑됨 - 이 경로는 `ApiResponseBodyAdvice`를 타지 않음(적용됐다면 이중 래핑) |
 | 애노테이션 없는 메서드(기본 `@ResponseBody` 경로) | `ApiResponseBodyAdvice`가 적용되어 정확히 한 번 래핑됨 |
 
-[`MiniDispatcherServletTest`](../../mini-spring/mini-webmvc/src/test/java/lab/minispring/webmvc/MiniDispatcherServletTest.java) (12개, 이번 주 5개 + 후기에서 추가한 JSON 역직렬화 2개):
+[`MiniDispatcherServletTest`](../../mini-spring/mini-webmvc/src/test/java/lab/minispring/webmvc/MiniDispatcherServletTest.java) (14개, 이번 주 5개 + 후기에서 추가한 JSON 역직렬화 2개 + 전역 `@ControllerAdvice` 상당 2개):
 
 | 실험 | 결과 |
 | --- | --- |
@@ -139,6 +141,8 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 | (후기) `@MiniRequestBody UserWithAddressPayload`(중첩 record) | 중첩된 JSON 객체가 재귀적으로 역직렬화됨 |
 | `MiniResponseEntity` 반환 | 지정한 상태 코드(201)로 응답 |
 | 같은 컨트롤러의 `@MiniExceptionHandler` | 500 대신 그 메서드가 만든 응답으로 대체 |
+| (후기) 같은 빈에 처리기가 없는 예외 | `registerControllerAdvice()`로 등록해 둔 전역 advice 빈이 대신 처리 |
+| (후기) 같은 빈과 전역 advice가 둘 다 처리할 수 있는 같은 예외 타입 | 같은 빈(로컬)이 항상 먼저 검사되어 이김 |
 
 (후기) [`MiniJsonReaderTest`](../../mini-spring/mini-webmvc/src/test/java/lab/minispring/webmvc/MiniJsonReaderTest.java) (10개, 파서 단위 테스트):
 
@@ -170,15 +174,16 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 **구현한 것**
 - `MiniArgumentResolver` 체인: `@MiniPathVariable`, `@MiniRequestParam`(필수/선택), `@MiniRequestBody`(`String` 원문 또는 record JSON 역직렬화), 애노테이션 없는 `HttpServletRequest`
 - `MiniReturnValueHandler` 체인: `String`, `MiniResponseEntity`(상태 코드 제어), 그 외 타입을 위한 리플렉션 기반 최소 JSON writer(`record`만 지원)
-- `AnnotationExceptionResolver`: 예외를 던진 핸들러와 **같은 빈**에서 `@MiniExceptionHandler`를 찾아 대신 호출
+- `AnnotationExceptionResolver`: 예외를 던진 핸들러와 **같은 빈**에서 먼저 `@MiniExceptionHandler`를 찾고, 없으면 전역 advice 빈들을 폴백으로 찾아 대신 호출
 - 경로 변수 추출을 위한 `AnnotationHandlerMapping`의 패턴 매칭 확장 + specificity 정렬(리터럴 우선)
 - **(후기에서 추가) `MiniJsonReader`**: `MiniJsonWriter`의 반대편 - record 하나로만(중첩 record는 재귀로) 역직렬화하는 손으로 짠 재귀 하강 파서. `RequestBodyArgumentResolver`가 대상 파라미터 타입을 보고 `String`이면 원문을, record면 `MiniJsonReader.read(body, type)`의 결과를 넘긴다 - 실제 Spring이 `StringHttpMessageConverter`/`MappingJackson2HttpMessageConverter` 중 대상 타입에 맞는 컨버터를 고르는 지점과 같다.
+- **(후기에서 추가) `AnnotationExceptionResolver#registerControllerAdvice(Object)`**: 실제 `@ControllerAdvice`의 "로컬 우선 → 전역 폴백" 2단계 탐색 중 두 번째 단계. `resolveException()`은 먼저 예외를 던진 핸들러와 같은 빈에서 찾고(기존 동작, 변경 없음), 못 찾으면 등록된 advice 빈들을 등록 순서대로 검사한다 - `AnnotationHandlerMapping#registerController()`가 컨트롤러 빈을 명시적으로 등록받는 것과 같은 방식으로, advice 빈도 컴포넌트 스캔 없이 명시적으로 등록받는다.
 
 **생략한 것 (의도적)**
 - **리졸버 매칭 결과 캐싱이 없다** - 실제 `HandlerMethodArgumentResolverComposite`는 `Map<MethodParameter, HandlerMethodArgumentResolver>`로 한 번 찾은 결과를 캐싱해서 매 요청마다 리졸버 목록을 처음부터 다시 훑지 않는다. mini는 매번 처음부터 순회한다 - 정확성에는 영향 없지만 실제라면 요청마다 반복되는 비용이다.
 - **`MiniJsonReader`는 record 전용이다** - 리스트/맵/제네릭/커스텀 역직렬화 규칙은 다루지 않는다(`MiniJsonWriter`가 record만 직렬화하는 것과 대칭). 알 수 없는 JSON 필드는 조용히 건너뛴다 - Jackson의 기본값(`FAIL_ON_UNKNOWN_PROPERTIES=true`)과 다른 의도적으로 관대한 선택이다. 실제 Jackson 기반 역직렬화는 이번 주 real-Spring 실험(project 25/26)에서 이미 다뤘다.
 - **`ResponseBodyAdvice` 상당 확장점이 없다** - mini의 `MiniReturnValueHandler`는 실제 `HandlerMethodReturnValueHandler`와 `ResponseBodyAdvice`를 하나로 합친 형태다. 이 둘을 분리하지 않았으므로, project 26에서 확인한 "수동 처리기가 advice를 우회한다"는 함정 자체가 mini에는 없다(애초에 그 두 확장점이 분리돼 있지 않아서 생기지 않는 문제다).
-- **`@ControllerAdvice` 상당(다른 컨트롤러의 예외까지 전역으로 처리)이 없다** - `AnnotationExceptionResolver`는 같은 빈 안에서만 찾는다. 실제 Spring의 2단계 탐색(로컬 우선 → 전역 폴백) 중 첫 단계만 구현했다.
+- **(후기에서 갱신) `@ControllerAdvice`의 컴포넌트 스캔 자동 발견이 없다** - 실제 Spring은 `@ControllerAdvice`가 붙은 빈을 컴포넌트 스캔으로 자동 찾아내고, `basePackages`/`assignableTypes`/`annotations` 속성으로 적용 범위를 좁힐 수 있다. mini는 `registerControllerAdvice()`로 명시적 등록만 지원하고, 범위를 좁히는 속성도 없다 - 등록한 빈은 전부 무조건 전역이다. "로컬 우선 → 전역 폴백"이라는 탐색 **순서** 자체는 이제 mini에도 있다.
 
 ## 11. Spring 설계 의도
 
@@ -187,6 +192,7 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 - **왜 `ResponseBodyAdvice`는 `HandlerMethodReturnValueHandler`와 별개의, 더 작은 확장점으로 분리돼 있는가**: `HandlerMethodReturnValueHandler`를 새로 만드는 것은 "이 반환 타입을 통째로 어떻게 처리할지"를 처음부터 다시 결정하는 무거운 작업이다(우리 `ApiResponseReturnValueHandler`가 메시지 변환기 목록까지 직접 구성해야 했던 것처럼). 반면 "이미 `@ResponseBody`로 처리되고 있는 응답의 본문만 살짝 바꾸고 싶다"는 훨씬 흔한 요구에는 그런 무거운 재구현이 필요 없어야 한다. `ResponseBodyAdvice`는 정확히 이 좁은 요구를 위해, 기존 처리 파이프라인 안에 끼어드는 더 가벼운 확장점으로 분리됐다 - 우리가 겪은 "수동 `ReturnValueHandler`는 advice를 우회한다"는 함정은, 이 분리를 정확히 이해하지 못하면 밟게 되는 자연스러운 발이다.
 - **왜 `@ExceptionHandler`는 같은 컨트롤러를 `@ControllerAdvice`보다 먼저 검사하는가**: 컨트롤러 작성자가 자신의 클래스 안에 직접 `@ExceptionHandler`를 선언했다면, 그것은 "이 컨트롤러만의 특별한 처리가 필요하다"는 명시적 의도다. 전역 `@ControllerAdvice`가 이보다 먼저 개입한다면, 컨트롤러 작성자가 직접 선언한 처리 로직이 예상치 못하게 무시될 수 있다 - "더 지역적이고 구체적인 선언이 전역 규칙보다 우선한다"는 원칙은 이 문서 전체에서(리터럴 vs 변수 경로, self-invocation 등) 여러 번 등장한 것과 같은 종류의 설계 판단이다.
 - **(후기에서 추가) 왜 `HttpMessageConverter` 선택은 대상 파라미터 타입을 보고 결정되는가**: `@RequestBody`가 붙은 파라미터가 "본문을 어떻게 해석해야 하는지"를 말해 주는 유일한 단서는 그 파라미터의 선언된 타입뿐이다 - 요청 헤더의 `Content-Type`은 실제로 그 값인지 신뢰할 수 없고(클라이언트가 틀리게 보낼 수 있다), 본문 자체를 먼저 파싱해 보지 않고는 형태를 알 수 없다. `RequestBodyArgumentResolver`가 `targetType == String.class`면 원문을, record면 `MiniJsonReader`를 고르는 것은 실제 `HttpMessageConverter` 목록에서 `canRead(type, mediaType)`이 대상 타입을 우선 기준으로 컨버터를 고르는 것과 같은 지점이다 - "무엇으로 변환할지"는 항상 목적지 타입이 결정한다.
+- **(후기에서 추가) `AnnotationExceptionResolver`에 전역 폴백을 채우고 나서**: 바로 위 항목("왜 같은 컨트롤러를 먼저 검사하는가")은 이 문서가 처음 마무리될 때는 실제 Spring 소스를 읽고 추론한 답이었을 뿐, mini 구현에는 그 순서 자체가 아예 없었다(같은 빈 안에서만 찾았으니 "먼저 검사"할 두 번째 단계가 없었다). `registerControllerAdvice()` 폴백을 채우고 나서야 `tryHandleWith(handlerMethod.bean(), ...)`을 먼저 부르고 실패해야만 advice 빈 루프로 넘어가는 그 순서를 코드로 직접 써 봤다 - "이해했다"와 "그 이해를 강제하는 코드를 직접 짰다"는 다르다는 것을, 이미 다른 이유로 다뤘던 질문에 대해서도 다시 확인한 셈이다.
 
 ## 12. 결론 (예상과 실제의 차이)
 
@@ -196,3 +202,4 @@ org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionR
 - Mini 구현이 보여준 것: 경로 변수를 추가하자마자 15주차에서 다뤘던 리터럴/변수 경로 우선순위 문제가 그대로 재발했다 - 매주 배운 교훈이 다음 주 구현에서 그냥 사라지는 게 아니라, 새로운 기능을 추가할 때마다 실제로 다시 검증해야 하는 살아있는 제약이라는 것을 보여준 사례다.
 - **이걸로 핵심 16주 과정(IoC 컨테이너 → 빈 생명주기 → 확장점 → 컴포넌트 스캔/DI → AOP → 트랜잭션 → Spring MVC)의 코드/문서 산출물이 마무리된다.** 선택 과정(17~20주차, Spring Boot 내부)으로 넘어가기 전에, 이번 16주간의 발견을 모으는 회고 문서를 별도로 정리할 수 있다.
 - **(후기에서 추가) `MiniJsonReader`를 채우고 나서 다시 보니**: `MiniJsonWriter`(직렬화)와 `MiniJsonReader`(역직렬화)는 서로 거울 관계지만 코드 형태는 전혀 다르다 - writer는 `RecordComponent` 하나를 훑어 값을 문자열에 이어 붙이면 끝이지만, reader는 문자열 위치(`pos`)를 직접 관리하며 "지금 어떤 토큰을 기대하는가"를 스스로 추적하는 재귀 하강 파서가 필요했다. 직렬화가 "이미 존재하는 구조를 순회하며 읽어 내는" 문제인 반면 역직렬화는 "아직 존재하지 않는 구조를 문자 스트림에서 조립해 내는" 문제라서, 대칭적으로 보이는 두 기능의 구현 난이도가 실제로는 한쪽으로 크게 기운다는 것을 직접 짜 보고 체감했다.
+- **(후기에서 추가) `AnnotationExceptionResolver`에 전역 폴백을 채우고 나서**: mini-webmvc(project 27)가 5단계에 걸쳐 미뤄 뒀던 마지막 생략 하나까지 채워지면서, 10번 절의 "생략한 것" 목록에서 실제 Spring과의 의도적 차이는 캐싱 부재·`MiniJsonReader`의 record 전용 범위·`ResponseBodyAdvice`/`HandlerMethodReturnValueHandler` 미분리·advice의 컴포넌트 스캔 자동 발견 부재, 이 네 가지로 좁혀졌다 - 전부 "메커니즘 자체"가 아니라 "그 메커니즘을 실운영에 맞게 정교화하는 주변부"라는 공통점이 있다. 핵심 실행 경로(로컬 우선 → 전역 폴백, 파라미터 타입이 컨버터를 고름, 등록 순서가 우선순위)는 이제 mini에도 전부 코드로 존재한다.

@@ -162,7 +162,7 @@ mini-webmvc (15~16주차, project 27)
 의도적으로 범위 밖에 둔 것들(각 문서 10번 절에 기록됨) 중 특히 다시 다뤄볼 만한 것:
 
 **핵심 16주에서**
-- mini 구현들의 일관된 생략: ~~JSON 실제 역직렬화(mini-webmvc)~~, ~~CGLIB 상당 서브클래스 프록시(mini-aop)~~, ~~NESTED 전파(mini-transaction)~~, `@ControllerAdvice` 전역 예외 처리(mini-webmvc) - 전부 "핵심 메커니즘을 이해하는 데는 필요 없었던" 것들이다. CGLIB 상당 서브클래스 프록시는 11번 절, NESTED 전파는 12번 절, JSON 역직렬화는 13번 절에 적었듯 이후에 마쳤다 - 나머지 하나(`@ControllerAdvice` 전역 예외 처리)는 여전히 미착수다.
+- mini 구현들의 일관된 생략: ~~JSON 실제 역직렬화(mini-webmvc)~~, ~~CGLIB 상당 서브클래스 프록시(mini-aop)~~, ~~NESTED 전파(mini-transaction)~~, ~~`@ControllerAdvice` 전역 예외 처리(mini-webmvc)~~ - 전부 "핵심 메커니즘을 이해하는 데는 필요 없었던" 것들이었지만, 네 개 다 이후에 마쳤다(CGLIB 상당 서브클래스 프록시는 11번 절, NESTED 전파는 12번 절, JSON 역직렬화는 13번 절, `@ControllerAdvice` 전역 예외 처리는 14번 절). 이 목록에 더 이상 미착수 항목이 없다.
 - 7주차에서 남긴 ASM 기반 컴포넌트 스캔의 실제 성능/안전성 비교는 시도하지 않았다.
 - 16주차에서 발견한 mini-webmvc의 인자 리졸버 캐싱 부재는 정확성에는 영향 없지만 실제라면 성능 이슈가 됐을 것이다.
 
@@ -282,3 +282,15 @@ Phase 1~5는 각자 새 개념 하나씩을 새 코드로 검증하는 식이라
 **"목적지 타입이 변환기를 고른다"는 원칙이 여기서도 반복됐다.** `RequestBodyArgumentResolver`가 `@MiniRequestBody`가 붙은 파라미터의 선언된 타입만 보고 원문 문자열 경로와 `MiniJsonReader` 경로를 가르는 것은, 실제 Spring의 `HttpMessageConverter` 목록이 `canRead(type, mediaType)`으로 대상 타입에 맞는 컨버터를 고르는 것과 같은 지점이다 - `Content-Type` 헤더는 클라이언트가 잘못 보낼 수 있어 신뢰할 수 없고, 본문은 파싱해 보기 전엔 형태를 알 수 없으니, 남는 유일하게 믿을 수 있는 단서는 코드에 선언된 목적지 타입뿐이라는 것이다.
 
 저장소 전체 자동화 테스트는 348개에서 360개가 됐다.
+
+## 14. 남겨 둔 질문 네 번째 — mini-webmvc의 @ControllerAdvice 전역 예외 처리
+
+7번 절 목록의 마지막 항목을 채웠다: `mini-spring/mini-webmvc`의 `AnnotationExceptionResolver`에 `registerControllerAdvice(Object)`를 추가해서, 예외를 던진 핸들러와 같은 빈에서 처리기를 못 찾으면 등록해 둔 전역 advice 빈들을(등록 순서대로) 폴백으로 검사하게 했다. 상세 내용은 [`docs/16-controller-invocation/controller-invocation.md`](../16-controller-invocation/controller-invocation.md)의 후기(5·8·10·11·12번 절)에 반영했다 - 이 절은 그중 반복해서 배울 만한 것만 추린다.
+
+**"이해했다"와 "그 순서를 강제하는 코드를 직접 짰다"는 다르다.** 이 문서 16주차 절(11번)은 이미 "왜 `@ExceptionHandler`는 같은 컨트롤러를 `@ControllerAdvice`보다 먼저 검사하는가"에 스스로 답을 적어 뒀었다 - 하지만 그건 실제 Spring 소스를 읽고 추론한 답이었을 뿐, mini 구현에는 애초에 "먼저 검사할 두 번째 단계" 자체가 없었다(같은 빈 안에서만 찾았으니까). `tryHandleWith(handlerMethod.bean(), ...)`을 먼저 부르고, 그게 실패해야만 `adviceBeans` 루프로 넘어가는 순서를 실제로 코드에 써 보고 나서야 - 그리고 로컬과 전역이 같은 예외 타입을 둘 다 처리할 수 있는 시나리오(`sameBeanExceptionHandlerIsCheckedBeforeGlobalControllerAdviceForTheSameExceptionType`)를 테스트로 직접 돌려 보고 나서야, 이미 "안다고 생각했던" 그 순서를 다시 한번 몸으로 확인했다. 3번 절의 교훈("이해했다고 생각했는데 실행해 보니 아니었다")이 이미 정답을 적어 둔 자리에서도 반복될 수 있다는 걸 보여준 사례다.
+
+**명시적 등록이 컴포넌트 스캔의 대체재로 충분했다.** 실제 Spring은 `@ControllerAdvice`가 붙은 빈을 컴포넌트 스캔으로 자동 찾아낸다. mini는 컴포넌트 스캔 자체를 이 모듈의 관심사로 두지 않았으므로(7주차에서 이미 별도로 다룬 주제), `AnnotationHandlerMapping#registerController()`가 컨트롤러 빈을 명시적으로 등록받는 것과 완전히 같은 패턴으로 `registerControllerAdvice()`도 명시적 등록을 택했다 - "빈을 어떻게 찾아내는가"(컴포넌트 스캔)와 "찾아낸 빈들을 어떤 순서로 검사하는가"(로컬 우선 → 전역 폴백)는 서로 독립적인 질문이었고, mini-webmvc 전체가 원래 후자에만 집중해 온 모듈이라 이 분리가 자연스러웠다.
+
+이것으로 7번 절 "남겨 둔 질문"의 "핵심 16주에서" 목록 중 mini 구현들의 일관된 생략 네 항목(CGLIB 상당 서브클래스 프록시, NESTED 전파, JSON 역직렬화, `@ControllerAdvice` 전역 예외 처리)이 전부 채워졌다.
+
+저장소 전체 자동화 테스트는 360개에서 362개가 됐다.

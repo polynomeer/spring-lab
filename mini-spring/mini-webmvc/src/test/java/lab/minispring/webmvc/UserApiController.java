@@ -33,8 +33,23 @@ class UserApiController {
         throw new IllegalStateException("controller exploded");
     }
 
+    @MiniRequestMapping(path = "/api/users/boom-unhandled-locally", method = "GET")
+    public String boomUnhandledLocally() {
+        throw new IllegalArgumentException("no local handler for this one");
+    }
+
+    @MiniRequestMapping(path = "/api/users/boom-both", method = "GET")
+    public String boomBoth() {
+        throw new NullPointerException("both handle this");
+    }
+
     @MiniExceptionHandler(IllegalStateException.class)
     public String handleIllegalState(IllegalStateException ex) {
         return "handled: " + ex.getMessage();
+    }
+
+    @MiniExceptionHandler(NullPointerException.class)
+    public String handleNullPointerLocally(NullPointerException ex) {
+        return "local-npe: " + ex.getMessage();
     }
 }
