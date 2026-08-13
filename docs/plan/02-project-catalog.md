@@ -60,7 +60,7 @@ spring-internals-lab/
 | 28 | Error Handling Pipeline | 완료 | [`experiments/mvc-exception-pipeline`](../../experiments/mvc-exception-pipeline) |
 | 29 | Application Event Bus | 완료 | [`experiments/application-event-lab`](../../experiments/application-event-lab) |
 | 30 | Mini Event Multicaster | 완료 | [`mini-spring/mini-event`](../../mini-spring/mini-event) |
-| 31 | SpringApplication Lifecycle Inspector | 기본 이벤트 순서/가용성만 완료 — 웹 서버 시작 시점 관찰은 자동 설정(18주차) 이후로 미룸 | [`experiments/spring-application-lifecycle`](../../experiments/spring-application-lifecycle) |
+| 31 | SpringApplication Lifecycle Inspector | 완료 — 기본 이벤트 순서/가용성에 더해, 실제 내장 톰캣의 웹 서버 시작 시점 관찰(`WebServerStartupTimingTest`)까지 마무리 | [`experiments/spring-application-lifecycle`](../../experiments/spring-application-lifecycle) |
 | 32 | Custom AutoConfiguration | 완료 (`request-observation` 대신 `mini-observability-starter`로 명명) | [`spring-extensions/mini-observability-starter`](../../spring-extensions/mini-observability-starter) |
 | 종합 | Mini Order Platform (16번 절, 번호 없는 캡스톤) | 완료 — Phase 1(IoC + 빈 생명주기)~Phase 6(Boot) 전부 완료 | [`sample-app/mini-order-platform`](../../sample-app/mini-order-platform) / [`docs/24-mini-order-platform`](../24-mini-order-platform/mini-order-platform.md) |
 
