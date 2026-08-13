@@ -18,6 +18,7 @@ include(
     "experiments:cache-abstraction-lab",
     "experiments:method-validation-lab",
     "experiments:test-context-caching-lab",
+    "experiments:scheduled-task-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
