@@ -2,6 +2,8 @@
 
 [`docs/plan/01-roadmap.md`](../plan/01-roadmap.md) 7주차, [`docs/plan/02-project-catalog.md`](../plan/02-project-catalog.md) 프로젝트 10(Mini Component Scanner)에 대응하는 분석 문서다. 같은 주제(컴포넌트 스캔 + 컬렉션 주입)를 실전 응용으로 다루는 프로젝트 11(Plugin Auto Discovery)은 나중에 별도로 진행해 13번에 이어 붙였다.
 
+**후기**: 12번 절은 원래 "메타 애노테이션 지원과 ASM 기반 재구현은 지금 범위 밖으로 남겨 뒀다 - 실제로 구현해 보면 `Class.forName` 기반 스캐너와 성능·안전성 차이를 직접 측정해 볼 만하다"며 그 실측을 남겨 뒀다(`docs/retrospective/retrospective.md` 7번 절 "남겨 둔 질문"의 핵심 16주 목록 마지막 항목). mini-webmvc의 세 가지 생략과 `mini-observability-starter`의 Micrometer 연동을 채운 뒤, 이 저장소에 남아 있던 마지막 항목도 채웠다 - `AsmComponentScanner`를 추가해서 실제로 바이트코드만 읽는 스캐너를 만들고, 손으로 만든 "링크가 실패하는 비후보 클래스"로 안전성 차이를, 300개 합성 클래스로 로딩 개수·소요 시간 차이를 직접 측정했다. 그 과정에서 `ComponentScanner`의 실제 버그(`LinkageError`가 catch되지 않고 새어 나오는 것)도 발견해서 고쳤다. 5·8·10·11·12번 절에 그 내용을 반영했다.
+
 ## 1. 이번 질문
 
 클래스패스는 어떻게 탐색하는가? 그 과정에서 모든 클래스를 실제로 로딩하는가? `@Component` 후보는 어떻게 판단하는가? 빈 이름은 어떻게 생성되는가? include filter와 exclude filter는 어떻게 함께 적용되는가?
@@ -44,6 +46,7 @@ Map<String, Class<?>> found = scanner.scan("lab.minispring.scan.fixtures", "lab.
 | `BeanNameGenerator` | 빈 이름 생성 전략 |
 | `AnnotatedBeanDefinitionReader` | 스캔 결과가 아니라 명시적으로 등록하는 클래스(예: `context.register(AppConfig.class)`)를 위한 리더 — 스캐너와는 다른 진입점 |
 | (mini) `ComponentScanner` | 디렉터리 순회 + 필터 + 이름 생성을 전부 우리 손으로 구현한 대응물 |
+| (후기) `AsmComponentScanner` | `MetadataReader`에 대응 - ASM `ClassReader`로 바이트코드만 읽어 후보 여부를 판단하고, 후보로 판명된 것만 `Class.forName`으로 로딩 |
 
 ## 6. 호출 흐름
 
@@ -91,6 +94,15 @@ org.springframework.context.annotation.ClassPathScanningCandidateComponentProvid
 | 이름 충돌 | 서로 다른 클래스가 같은 이름으로 귀결되면 `DuplicateComponentNameException` |
 | 커스텀 `BeanNameGenerator` | 기본 decapitalize 대신 사용되지만, 애노테이션 명시 이름보다는 후순위 |
 
+(후기) [`AsmComponentScannerTest`](../../mini-spring/mini-component-scan/src/test/java/lab/minispring/scan/AsmComponentScannerTest.java) (2개, `ComponentScanner`와 `AsmComponentScanner`를 같은 임시 디렉터리에 대해 나란히 돌린 비교 실험):
+
+| 실험 | 결과 |
+| --- | --- |
+| `@MiniComponent`가 없고 존재하지 않는 슈퍼클래스를 참조하는(ASM `ClassWriter`로 직접 만든) 클래스 하나를 섞어서 스캔 | `ComponentScanner`는 그 클래스를 로딩(링크)하려다 `NoClassDefFoundError`로 스캔 전체가 실패한다(`ComponentScanException`으로 감싸짐, 아래 "직접 겪은 버그" 참고). `AsmComponentScanner`는 바이트코드만 보고 "`@MiniComponent`가 없다"는 걸 알아서, 그 클래스 이름을 `Class.forName`에 **단 한 번도 넘기지 않고** 정상 완료된다 - `RecordingClassLoader`로 실제 로딩 시도 자체를 기록해서 확인했다 |
+| 300개 합성 클래스(그중 20개만 `@MiniComponent`) 스캔 | 둘 다 같은 20개를 찾아내지만(결과는 동일), `ComponentScanner`는 300개 전부를 `Class.forName`으로 로딩하고 `AsmComponentScanner`는 후보로 판명된 20개만 로딩한다. 실측 소요 시간(3회 측정, JVM 웜업 없는 단발성 실행 기준): reflection 21~24ms 대 ASM 13~15ms - 약 35~40% 빠르다. 흥미로운 부수 관찰: 둘 다 `java.lang.Object`를 딱 한 번 더 로딩하지만(첫 슈퍼클래스 해석이 캐싱됨), `ComponentScanner`만 `MiniComponent` 애노테이션 클래스 자체도 한 번 더 로딩한다(`isAnnotationPresent()`가 리플렉션으로 애노테이션 타입을 resolve해야 하기 때문) - `AsmComponentScanner`는 애노테이션 서술자 문자열만 비교하므로 그 클래스를 아예 로딩하지 않는다 |
+
+**직접 겪은 버그(후기)**: 이 비교 테스트를 짜기 전까지, `ComponentScanner.scanDirectory()`의 `catch (ClassNotFoundException e)`는 `NoClassDefFoundError`(그 상위 타입인 `LinkageError`)를 잡지 못했다 - `Class.forName(name, false, classLoader)`는 `initialize=false`여도 JVMS 5.3에 따라 슈퍼클래스는 로딩 시점에 즉시 resolve해야 하므로, 슈퍼클래스가 없는 클래스 하나가 스캔 대상 패키지에 섞여 있으면 `ComponentScanException`이 아니라 catch되지 않은 `Error`가 그대로 `scan()` 밖으로 새어 나왔다. `LinkageError`도 함께 잡도록 고쳤다 - 다른 실패(`IOException` 등)와 마찬가지로 `ComponentScanException`으로 일관되게 감싸진다.
+
 ## 9. 공식 테스트 분석
 
 `spring-framework` v6.2.19 소스의 `ClassPathScanningCandidateComponentProviderTests`로 확인했다.
@@ -107,23 +119,27 @@ org.springframework.context.annotation.ClassPathScanningCandidateComponentProvid
 - 명시적 이름 vs `BeanNameGenerator` 기본값
 - 이름 충돌 감지
 
+- **(후기에서 추가) `AsmComponentScanner`**: 실제 `MetadataReader`와 같은 접근 - ASM `ClassReader`로 클래스 파일의 바이트코드(클래스 modifier, `@MiniComponent` 애노테이션 서술자, 그 `value()`)만 읽어서 후보 여부를 판단하고, 후보로 판명된 것만 `Class.forName`으로 실제 로딩한다. `ComponentScanner`와 같은 `Map<String, Class<?>>` 계약을 그대로 지키므로 나란히 비교할 수 있다.
+
 **생략한 것**
-- **ASM 기반 메타데이터 읽기** — 가장 큰 격차다. 우리는 후보 여부를 판단하기 위해 `Class.forName()`으로 클래스를 로딩(링크)한 뒤에야 애노테이션을 검사한다. Spring은 `MetadataReader`로 클래스 파일의 바이트코드만 읽어서, 후보가 아닌 것으로 판명되면 그 클래스는 JVM에 전혀 로딩되지 않는다.
 - 메타 애노테이션(스테레오타입) 지원 — `@Service`/`@Repository`처럼 `@Component`를 메타 애노테이션으로 붙인 커스텀 애노테이션까지 인식하는 것. 우리는 `@MiniComponent` 직접 부착만 인식한다.
 - jar 파일 안의 클래스 스캔 — 지금은 로컬 파일시스템 디렉터리만 지원한다(테스트/개발 환경 한정).
 - 인덱스 기반 스캔(`spring-context-indexer`의 `META-INF/spring.components`) — 컴파일 타임에 후보 목록을 미리 만들어 두는 최적화로, 아예 다루지 않았다.
+- **(후기에서 추가) `AsmComponentScanner`는 커스텀 `Predicate<Class<?>>` include/exclude 필터를 지원하지 않는다** — 바이트코드만으로 판단할 수 있는 조건은 `@MiniComponent` 애노테이션과 클래스 modifier(구체/추상/인터페이스)뿐이다. 필터까지 로딩 없이 지원하려면 실제 Spring의 `TypeFilter`처럼 필터 자체가 `Class<?>` 대신 메타데이터(`AnnotationMetadata`)를 받는 형태로 다시 설계돼야 한다 - `ComponentScanner`가 이미 갖고 있던 필터 기능을 `AsmComponentScanner`로 그대로 옮기지 않은 것은, 두 스캐너의 "판단 대상"(로딩된 `Class` vs 바이트코드 메타데이터) 자체가 근본적으로 다르기 때문이다.
 
 ## 11. Spring 설계 의도
 
 - **왜 ASM으로 바이트코드만 읽는가**: 애노테이션 하나 확인하자고 클래스를 로딩하면, 그 클래스의 static 초기화 블록이 실행되거나(우리는 `initialize=false`로 이건 피했다) 그 클래스가 참조하는 다른 클래스들까지 연쇄적으로 로딩·링크될 위험이 있다. 특히 스캔 대상 패키지에 아직 클래스패스에 없는 의존성을 참조하는 클래스가 섞여 있으면 `NoClassDefFoundError`로 애플리케이션 전체 기동이 막힐 수 있다. 바이트코드 레벨에서 애노테이션만 읽으면 이런 부작용 없이 "이 클래스가 후보인가"만 안전하게 판단할 수 있다.
 - **왜 include와 exclude를 별도 리스트로 분리했는가**: "기본적으로 `@Component`인 것만 스캔하되, 특정 패키지의 특정 타입만 예외로 빼고 싶다"처럼 두 조건을 조합해서 쓰는 경우가 많다. 하나의 조건식으로 합치는 대신 두 리스트(그리고 "exclude가 항상 이긴다"는 단순한 규칙)로 나누면, 사용자는 "포함시킬 것"과 "그래도 빼고 싶은 것"을 독립적으로 선언할 수 있다.
 - **왜 빈 이름 생성이 전략 인터페이스(`BeanNameGenerator`)로 분리돼 있는가**: 컴포넌트 스캔과 `@Bean` 메서드는 이름 결정 규칙이 다르다(전자는 클래스 이름, 후자는 메서드 이름). 이름 생성 규칙 자체를 전략으로 빼두면, 두 등록 경로가 서로 다른 규칙을 쓰면서도 "이름이 없으면 생성기에 위임한다"는 같은 골격을 공유할 수 있다.
+- **(후기에서 추가) "연쇄적 클래스 로딩·링크의 부작용"이 추상적인 위험이 아니라 재현 가능한 버그였다**: 11주차 문서(118번)는 이 위험을 소스를 읽고 추론해서 적어 뒀을 뿐이었다. `AsmComponentScanner`를 만들면서 그 위험을 직접 재현해 보니(존재하지 않는 슈퍼클래스를 참조하는 클래스 하나), `ComponentScanner`가 그 클래스를 로딩하려다 스캔 전체가 `Error`로 죽는 것을 실제로 관찰했다 - 그리고 그 실패가 우리가 미리 약속한 `ComponentScanException`조차 아니라, catch 블록의 허점 때문에 새어 나오는 catch되지 않은 `Error`였다는 것까지 발견했다. "왜 ASM으로 읽는가"라는 질문에 대한 답이 이번엔 추론이 아니라 재현된 사고로 확인된 셈이다.
 
 ## 12. 결론 (예상과 실제의 차이)
 
 - 예상대로였던 것: exclude filter가 include filter보다 항상 우선한다는 가정 — 공식 테스트로 정확히 확인됐다.
 - 이번에 새로 구체화된 것: "Spring은 클래스를 로딩하지 않는다"는 것은 알고 있었지만, **정확히 어떤 방식(ASM 바이트코드 읽기)이고 왜 그렇게 해야 하는지**(연쇄적 클래스 로딩/링크의 부작용 회피)는 이번에 처음 정리했다. 우리 구현은 `initialize=false`로 절반만 흉내 냈다 — static 초기화는 피했지만 로딩·링크 자체는 여전히 발생한다.
-- 새로 열린 질문: 메타 애노테이션(스테레오타입) 지원과 ASM 기반 재구현은 지금 범위 밖으로 남겨 뒀다 — 실제로 구현해 보면 `Class.forName` 기반 스캐너와 성능·안전성 차이를 직접 측정해 볼 만하다.
+- 새로 열린 질문(당시): 메타 애노테이션(스테레오타입) 지원과 ASM 기반 재구현은 지금 범위 밖으로 남겨 뒀다 — 실제로 구현해 보면 `Class.forName` 기반 스캐너와 성능·안전성 차이를 직접 측정해 볼 만하다.
+- **(후기에서 추가) 그 질문을 실제로 열어 보니**: 성능 차이는 예상한 방향(ASM이 더 빠름, 실측 약 35~40%)대로였지만, 그 자체보다 더 중요했던 건 "무엇을 로딩하는가"의 차이였다 - `RecordingClassLoader`로 실제 로딩 시도를 기록해 보니, `ComponentScanner`는 후보가 아닌 클래스까지 전부(300개 중 300개) 로딩하는 반면 `AsmComponentScanner`는 후보로 판명된 것만(20개) 로딩했다. 그리고 그 실험을 준비하는 과정에서 전혀 찾을 생각이 없었던 진짜 버그(`LinkageError` catch 누락)를 우연히 발견해서 고쳤다 - "성능·안전성을 측정해 보자"는 계획이 계획대로 성능은 측정하게 해 줬지만, 안전성 쪽에서는 측정 대신 실제 결함을 찾아내는 결과로 이어졌다. 이것으로 7번 절 "남겨 둔 질문"의 "핵심 16주에서" 목록이 전부 채워졌다.
 
 ------
 

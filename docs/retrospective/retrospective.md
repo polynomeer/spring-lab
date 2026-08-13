@@ -163,7 +163,7 @@ mini-webmvc (15~16주차, project 27)
 
 **핵심 16주에서**
 - mini 구현들의 일관된 생략: ~~JSON 실제 역직렬화(mini-webmvc)~~, ~~CGLIB 상당 서브클래스 프록시(mini-aop)~~, ~~NESTED 전파(mini-transaction)~~, ~~`@ControllerAdvice` 전역 예외 처리(mini-webmvc)~~ - 전부 "핵심 메커니즘을 이해하는 데는 필요 없었던" 것들이었지만, 네 개 다 이후에 마쳤다(CGLIB 상당 서브클래스 프록시는 11번 절, NESTED 전파는 12번 절, JSON 역직렬화는 13번 절, `@ControllerAdvice` 전역 예외 처리는 14번 절). 이 목록에 더 이상 미착수 항목이 없다.
-- 7주차에서 남긴 ASM 기반 컴포넌트 스캔의 실제 성능/안전성 비교는 시도하지 않았다.
+- ~~7주차에서 남긴 ASM 기반 컴포넌트 스캔의 실제 성능/안전성 비교는 시도하지 않았다.~~ — 17번 절에 적었듯 이후에 마쳤다.
 - ~~16주차에서 발견한 mini-webmvc의 인자 리졸버 캐싱 부재는 정확성에는 영향 없지만 실제라면 성능 이슈가 됐을 것이다.~~ — 15번 절에 적었듯 이후에 마쳤다.
 
 **선택 4주에서**
@@ -303,7 +303,7 @@ Phase 1~5는 각자 새 개념 하나씩을 새 코드로 검증하는 식이라
 
 **"정확성에는 영향 없는 최적화"를 검증하는 방법은 기능 검증과 다르다.** 이 항목은 다른 세 개(NESTED, CGLIB, JSON 역직렬화)와 성격이 다르다 - 저 셋은 "안 되던 게 된다"는 관찰 가능한 동작 변화가 있었지만, 캐싱은 "이미 되던 게 더 적은 일로 된다"는 변화라 결과만 보는 테스트로는 아예 검증이 불가능하다. 대상 코드를 감싸는 얇은 계측 레이어(`CountingArgumentResolver`)를 별도로 만들어야 했다는 점에서, "동작을 검증한다"와 "내부 경로를 검증한다"가 서로 다른 도구를 요구한다는 것을 새로 배웠다.
 
-이것으로 7번 절 "남겨 둔 질문"의 "핵심 16주에서" 목록 중 남은 항목은 7주차의 ASM 기반 컴포넌트 스캔 비교 하나뿐이다. "선택 4주에서" 목록의 두 항목(17주차 웹 서버 기동 시점 관찰, 20주차 실제 Micrometer 연동)도 여전히 남아 있다.
+이것으로 7번 절 "남겨 둔 질문"의 "핵심 16주에서" 목록 중 남은 항목은 7주차의 ASM 기반 컴포넌트 스캔 비교 하나뿐이다. "선택 4주에서" 목록의 두 항목(17주차 웹 서버 기동 시점 관찰, 20주차 실제 Micrometer 연동)도 여전히 남아 있다. — 후기: 20주차 Micrometer 연동은 16번 절, 7주차 ASM 비교는 17번 절에 적었듯 이후에 마쳤다 - 17주차 웹 서버 기동 시점 관찰만 여전히 미착수다.
 
 저장소 전체 자동화 테스트는 362개에서 364개가 됐다.
 
@@ -318,3 +318,15 @@ Phase 1~5는 각자 새 개념 하나씩을 새 코드로 검증하는 식이라
 **조건부 등록이 인터셉터 자신뿐 아니라 그 인터셉터가 의존하는 인프라에도 그대로 적용됐다.** `RequestObservationInterceptor`(19주차부터 있던 `@ConditionalOnMissingBean`)에 이어 `ObservationRegistry`에도 같은 패턴을 적용하면서, "사용자가 이미 `ObservationRegistry`를 갖고 있으면(예: actuator) 그걸 그대로 공유한다"는 새 시나리오가 하나 더 생겼다 - `userDefinedObservationRegistryMakesTheAutoConfigurationBackOffAndIsSharedWithTheInterceptor` 테스트로 확인했듯, 자동 설정이 물러날 뿐 아니라 인터셉터도 그 사용자 레지스트리를 그대로 주입받는다.
 
 저장소 전체 자동화 테스트는 364개에서 366개가 됐다. 이것으로 7번 절 "선택 4주에서" 목록은 20주차 Micrometer 연동 항목이 채워지고, 17주차 웹 서버 기동 시점 관찰 하나만 남았다.
+
+## 17. 남겨 둔 질문 — 7주차 ASM 기반 컴포넌트 스캔의 실제 성능/안전성 비교
+
+7번 절 "핵심 16주에서" 목록의 마지막 항목을 채웠다: `mini-spring/mini-component-scan`에 `AsmComponentScanner`를 추가해서, 클래스를 로딩하지 않고 ASM으로 바이트코드만 읽어 후보를 판단하는 실제 Spring `MetadataReader` 방식을 재현하고, 기존 리플렉션 기반 `ComponentScanner`와 직접 비교했다. 상세 내용은 [`docs/07-component-scan/component-scan.md`](../07-component-scan/component-scan.md)의 후기(5·8·10·11·12번 절)에 반영했다 - 이 절은 그중 반복해서 배울 만한 것만 추린다.
+
+**측정하려던 것을 측정하기도 전에, 진짜 버그부터 튀어나왔다.** 안전성 차이를 결정론적으로 재현하려고, ASM `ClassWriter`로 존재하지 않는 슈퍼클래스를 참조하는 클래스를 직접 만들어(`SyntheticClasses.brokenSuperclass`) 스캔 대상에 섞었다. 예상대로 `ComponentScanner`는 그 클래스를 로딩하려다 죽었는데, 그 실패가 `ComponentScanner`가 스스로 약속한 `ComponentScanException`이 아니라 **catch되지 않은 `java.lang.Error`**였다 - `scanDirectory()`의 catch 블록이 `ClassNotFoundException`만 잡고 `LinkageError`(`NoClassDefFoundError`의 상위 타입)는 잡지 않았기 때문이다. "안전성을 측정해 보자"는 계획이 계획대로 측정도 하게 해 줬지만, 측정 도구를 준비하는 과정에서 전혀 찾을 생각이 없었던 실제 결함을 먼저 찾아냈다 - 그 자리에서 `LinkageError`도 함께 잡도록 고쳤다.
+
+**"로딩했는가"는 결과값보다 훨씬 정직한 증거였다.** 두 스캐너의 최종 결과(찾아낸 컴포넌트 20개)는 완전히 같다 - 그것만 보면 차이가 전혀 드러나지 않는다. `RecordingClassLoader`(모든 `loadClass()` 호출을 기록하는 커스텀 클래스로더)로 "실제로 무엇을 로딩하려 시도했는가"를 직접 관찰하고 나서야, `ComponentScanner`는 300개 전부를, `AsmComponentScanner`는 후보로 판명된 20개만 로딩한다는 걸 증명할 수 있었다 - mini-webmvc의 인자 리졸버 캐싱(15번 절)을 검증할 때 결과값만으로는 캐시 동작을 증명할 수 없었던 것과 같은 교훈이, 이번엔 "무엇을 로딩했는가"라는 축에서 반복됐다.
+
+**부수 관찰 하나가 설계 차이를 더 선명하게 보여줬다.** 두 스캐너 모두 `java.lang.Object`를 한 번 더 로딩했지만(첫 슈퍼클래스 해석이 캐싱됨), `ComponentScanner`만 `MiniComponent` 애노테이션 클래스 자체도 로딩했다 - `isAnnotationPresent()`가 리플렉션으로 애노테이션 타입을 resolve해야 하기 때문이다. `AsmComponentScanner`는 애노테이션 서술자 문자열(`"Llab/minispring/scan/MiniComponent;"`)만 비교하므로 그 클래스를 아예 로딩할 필요가 없다 - "애노테이션이 있는지 확인한다"는 같은 목적을, 한쪽은 클래스를 로딩해서(리플렉션), 다른 한쪽은 문자열만 비교해서(바이트코드) 달성한다는 차이를 실측으로 확인했다.
+
+저장소 전체 자동화 테스트는 366개에서 368개가 됐다. 이것으로 `docs/retrospective/retrospective.md` 7번 절 "남겨 둔 질문"의 "핵심 16주에서" 목록이 전부 채워졌다 - 남은 것은 "선택 4주에서" 목록의 마지막 항목, 17주차 "웹 서버가 실제로 언제 뜨는가" 관찰 하나뿐이다.

@@ -16,6 +16,7 @@ tomcatEmbed = "10.1.57"
 snakeyaml = "2.4"
 byteBuddy = "1.15.11"
 micrometer = "1.14.7"
+asm = "9.7.1"
 
 [libraries]
 spring-context = { module = "org.springframework:spring-context", version.ref = "spring" }
@@ -41,6 +42,7 @@ tomcat-embed-core = { module = "org.apache.tomcat.embed:tomcat-embed-core", vers
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 byte-buddy = { module = "net.bytebuddy:byte-buddy", version.ref = "byteBuddy" }
 micrometer-observation = { module = "io.micrometer:micrometer-observation", version.ref = "micrometer" }
+asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine" }
