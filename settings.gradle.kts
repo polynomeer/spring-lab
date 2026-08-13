@@ -19,6 +19,7 @@ include(
     "experiments:method-validation-lab",
     "experiments:test-context-caching-lab",
     "experiments:scheduled-task-lab",
+    "experiments:async-method-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
