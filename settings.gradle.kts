@@ -27,6 +27,7 @@ include(
     "experiments:profile-condition-lab",
     "experiments:import-selector-lab",
     "experiments:custom-scope-lab",
+    "experiments:aware-callback-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
