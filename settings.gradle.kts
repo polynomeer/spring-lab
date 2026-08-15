@@ -24,6 +24,7 @@ include(
     "experiments:lookup-method-lab",
     "experiments:factory-bean-lab",
     "experiments:object-provider-lab",
+    "experiments:profile-condition-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
