@@ -21,6 +21,7 @@ include(
     "experiments:scheduled-task-lab",
     "experiments:async-method-lab",
     "experiments:conversion-service-lab",
+    "experiments:lookup-method-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
