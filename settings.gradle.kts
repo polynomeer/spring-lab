@@ -32,6 +32,7 @@ include(
     "experiments:message-source-lab",
     "experiments:property-source-ordering-lab",
     "experiments:smart-initializing-singleton-lab",
+    "experiments:task-decorator-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
