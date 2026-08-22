@@ -37,6 +37,7 @@ include(
     "experiments:expose-proxy-lab",
     "experiments:bean-definition-overriding-lab",
     "experiments:generic-dependency-lab",
+    "experiments:configuration-condition-phase-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
