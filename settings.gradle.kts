@@ -35,6 +35,7 @@ include(
     "experiments:task-decorator-lab",
     "experiments:bean-wrapper-lab",
     "experiments:expose-proxy-lab",
+    "experiments:bean-definition-overriding-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
