@@ -1,4 +1,4 @@
-# spring-internals-lab
+# spring-lab
 
 [![Build](https://github.com/polynomeer/spring-internals-lab/actions/workflows/build.yml/badge.svg)](https://github.com/polynomeer/spring-internals-lab/actions/workflows/build.yml)
 
