@@ -40,6 +40,7 @@ include(
     "experiments:configuration-condition-phase-lab",
     "experiments:post-processor-ordering-lab",
     "experiments:scoped-proxy-lab",
+    "experiments:placeholder-resolution-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
