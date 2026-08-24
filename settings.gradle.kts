@@ -41,6 +41,7 @@ include(
     "experiments:post-processor-ordering-lab",
     "experiments:scoped-proxy-lab",
     "experiments:placeholder-resolution-lab",
+    "experiments:aspect-ordering-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
