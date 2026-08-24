@@ -39,6 +39,7 @@ include(
     "experiments:generic-dependency-lab",
     "experiments:configuration-condition-phase-lab",
     "experiments:post-processor-ordering-lab",
+    "experiments:scoped-proxy-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
