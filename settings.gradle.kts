@@ -42,6 +42,7 @@ include(
     "experiments:scoped-proxy-lab",
     "experiments:placeholder-resolution-lab",
     "experiments:aspect-ordering-lab",
+    "experiments:composed-annotation-lab",
     "mini-spring:mini-container",
     "mini-spring:mini-component-scan",
     "mini-spring:mini-java-config",
