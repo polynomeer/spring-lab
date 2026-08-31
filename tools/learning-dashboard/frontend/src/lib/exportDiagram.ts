@@ -36,7 +36,11 @@ function inlineComputedStyles(source: Element, target: Element) {
 function buildStandaloneSvg(svg: SVGSVGElement): SVGSVGElement {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   inlineComputedStyles(svg, clone);
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  // xmlns를 여기서 또 설정하면 안 된다 - cloneNode가 이미 SVG 네임스페이스를 그대로
+  // 들고 있어서, XMLSerializer가 직렬화할 때 xmlns="..."를 알아서 한 번 써 준다. 직접 또
+  // setAttribute("xmlns", ...)하면 같은 속성이 두 번 찍혀 잘못된 XML이 되고, 그렇게 저장된
+  // .svg 파일은 다시 열었을 때 파싱에 실패한다 - 화면에서 내보내기 버튼만 눌러서는 안 보이고
+  // (다운로드 자체는 에러 없이 끝난다), 실제로 그 파일을 다시 파싱해 봐야 드러나는 버그였다.
 
   const background = getComputedStyle(document.documentElement).getPropertyValue("--ink-900").trim() || "#191d24";
   const [, , viewBoxWidth, viewBoxHeight] = (clone.getAttribute("viewBox") ?? "0 0 100 100").split(/\s+/);
