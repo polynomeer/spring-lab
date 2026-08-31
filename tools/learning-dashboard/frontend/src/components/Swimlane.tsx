@@ -4,6 +4,8 @@ interface Props {
   lanes: Lane[];
   markerMeta: Record<string, StatusMeta>;
   emptyHint: string;
+  selectedHitId?: number | null;
+  onHoverHitId?: (hitId: number | null) => void;
 }
 
 const STEP = 96;
@@ -15,7 +17,7 @@ const LANE_HEIGHT = 78;
  * eventMulticastReducer.ts)가 맡고, 이 컴포넌트는 이미 계산된 {@link Lane}[]과 마커 색상/라벨
  * 맵만 받는다(StatusGraph가 statusMeta를 prop으로 받는 것과 같은 패턴).
  */
-export function Swimlane({ lanes, markerMeta, emptyHint }: Props) {
+export function Swimlane({ lanes, markerMeta, emptyHint, selectedHitId, onHoverHitId }: Props) {
   if (lanes.length === 0) {
     return <div className="empty-hint">{emptyHint}</div>;
   }
@@ -25,7 +27,7 @@ export function Swimlane({ lanes, markerMeta, emptyHint }: Props) {
   const height = lanes.length * LANE_HEIGHT + 20;
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ maxWidth: "100%", height: "auto", display: "block" }}>
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" style={{ display: "block" }}>
       {lanes.map((lane, laneIndex) => {
         const y = 24 + laneIndex * LANE_HEIGHT;
         return (
@@ -39,8 +41,18 @@ export function Swimlane({ lanes, markerMeta, emptyHint }: Props) {
               const meta = markerMeta[event.type] ?? { label: event.type, color: "var(--text-faint)" };
               const x = 60 + event.order * STEP;
               const unexpected = event.unexpected === "true";
+              const selected = event.hitId === selectedHitId;
               return (
-                <g key={index} transform={`translate(${x}, ${y + 16})`}>
+                <g
+                  key={index}
+                  transform={`translate(${x}, ${y + 16})`}
+                  onMouseEnter={() => onHoverHitId?.(event.hitId)}
+                  onMouseLeave={() => onHoverHitId?.(null)}
+                  style={{ cursor: onHoverHitId ? "pointer" : undefined }}
+                >
+                  {selected && (
+                    <circle r={18} fill="none" stroke="var(--amber)" strokeWidth={2} strokeDasharray="3 3" />
+                  )}
                   <circle r={9} fill={meta.color} fillOpacity={0.22} stroke={meta.color} strokeWidth={2} />
                   {unexpected && <circle r={14} fill="none" stroke="var(--rose)" strokeWidth={1.5} strokeDasharray="3 2" />}
                   <text y={-16} textAnchor="middle" className="lane-marker-hit">

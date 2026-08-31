@@ -5,6 +5,11 @@ interface Props {
   edges: GraphEdge[];
   statusMeta: Record<string, StatusMeta>;
   emptyHint: string;
+  // RAW LOG에서 선택한 히트가 이 빈에 관한 것이면 그 노드에 링을 그린다(로그 → 다이어그램).
+  highlightedNodeId?: string | null;
+  // 노드에 마우스를 올리면 그 빈과 관련된 히트들을 RAW LOG에서 강조할 수 있게 알려준다
+  // (다이어그램 → 로그, 반대 방향).
+  onHoverNode?: (nodeId: string | null) => void;
 }
 
 const COLUMNS = 3;
@@ -13,7 +18,7 @@ const ROW_HEIGHT = 104;
 const NODE_RADIUS = 32;
 const MARGIN = 95;
 
-export function StatusGraph({ nodes, edges, statusMeta, emptyHint }: Props) {
+export function StatusGraph({ nodes, edges, statusMeta, emptyHint, highlightedNodeId, onHoverNode }: Props) {
   if (nodes.length === 0) {
     return <div className="empty-hint">{emptyHint}</div>;
   }
@@ -29,7 +34,7 @@ export function StatusGraph({ nodes, edges, statusMeta, emptyHint }: Props) {
   const height = (Math.floor((nodes.length - 1) / COLUMNS) + 1) * ROW_HEIGHT + 40;
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ maxWidth: "100%", height: "auto", display: "block" }}>
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" style={{ display: "block" }}>
       <defs>
         <marker id="graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" className="graph-arrowhead" />
@@ -59,8 +64,18 @@ export function StatusGraph({ nodes, edges, statusMeta, emptyHint }: Props) {
           return null;
         }
         const meta = statusMeta[node.status] ?? { label: node.status, color: "var(--text-faint)" };
+        const highlighted = node.id === highlightedNodeId;
         return (
-          <g key={node.id} transform={`translate(${pos.x}, ${pos.y})`}>
+          <g
+            key={node.id}
+            transform={`translate(${pos.x}, ${pos.y})`}
+            onMouseEnter={() => onHoverNode?.(node.id)}
+            onMouseLeave={() => onHoverNode?.(null)}
+            style={{ cursor: onHoverNode ? "pointer" : undefined }}
+          >
+            {highlighted && (
+              <circle r={NODE_RADIUS + 7} fill="none" stroke="var(--amber)" strokeWidth={2} strokeDasharray="3 3" />
+            )}
             <circle r={NODE_RADIUS} fill={meta.color} fillOpacity={0.16} stroke={meta.color} strokeWidth={2.2} />
             <text textAnchor="middle" y={NODE_RADIUS + 17} className="graph-node-label">
               {node.label}

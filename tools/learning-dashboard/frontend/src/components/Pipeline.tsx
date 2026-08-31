@@ -3,6 +3,8 @@ import type { PipelineStage } from "../graph/types";
 interface Props {
   stages: PipelineStage[];
   emptyHint: string;
+  selectedHitId?: number | null;
+  onHoverHitId?: (hitId: number | null) => void;
 }
 
 const BOX_WIDTH = 148;
@@ -28,16 +30,16 @@ const STATUS_LABEL: Record<PipelineStage["status"], string> = {
  * dispatcherReducer/exceptionResolutionReducer가 맡고, 이 컴포넌트는 이미 계산된
  * {@link PipelineStage}[]만 받는다.
  */
-export function Pipeline({ stages, emptyHint }: Props) {
+export function Pipeline({ stages, emptyHint, selectedHitId, onHoverHitId }: Props) {
   const started = stages.some((stage) => stage.status !== "pending");
   const width = stages.length * BOX_WIDTH + (stages.length - 1) * GAP + MARGIN * 2;
   const height = BOX_HEIGHT + 64;
   const y = 20;
 
   return (
-    <div>
+    <>
       {!started && <div className="empty-hint">{emptyHint}</div>}
-      <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ maxWidth: "100%", height: "auto", display: "block" }}>
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" style={{ display: "block" }}>
         <defs>
           <marker id="pipeline-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
             <path d="M0,0 L6,3 L0,6 Z" className="graph-arrowhead" />
@@ -52,8 +54,28 @@ export function Pipeline({ stages, emptyHint }: Props) {
         {stages.map((stage, index) => {
           const x = MARGIN + index * (BOX_WIDTH + GAP);
           const color = STATUS_COLOR[stage.status];
+          const selected = stage.hitId != null && stage.hitId === selectedHitId;
           return (
-            <g key={stage.id} transform={`translate(${x}, ${y})`}>
+            <g
+              key={stage.id}
+              transform={`translate(${x}, ${y})`}
+              onMouseEnter={() => stage.hitId != null && onHoverHitId?.(stage.hitId)}
+              onMouseLeave={() => onHoverHitId?.(null)}
+              style={{ cursor: onHoverHitId && stage.hitId != null ? "pointer" : undefined }}
+            >
+              {selected && (
+                <rect
+                  x={-4}
+                  y={-4}
+                  width={BOX_WIDTH + 8}
+                  height={BOX_HEIGHT + 8}
+                  rx={12}
+                  fill="none"
+                  stroke="var(--amber)"
+                  strokeWidth={2}
+                  strokeDasharray="3 3"
+                />
+              )}
               <rect
                 width={BOX_WIDTH}
                 height={BOX_HEIGHT}
@@ -74,6 +96,6 @@ export function Pipeline({ stages, emptyHint }: Props) {
           );
         })}
       </svg>
-    </div>
+    </>
   );
 }

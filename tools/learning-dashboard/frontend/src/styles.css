@@ -381,6 +381,84 @@ select {
   line-height: 1.7;
 }
 
+/* 다이어그램 자체의 크기 조절 - textarea와 같은 네이티브 리사이즈 손잡이(우하단)로 세로
+   길이를 늘리거나 줄인다(그 높이는 DiagramCanvas가 localStorage에 남긴다). SVG는
+   height: 100%로 내부 뷰포트를 그대로 채우므로(viewBox + preserveAspectRatio 기본값이
+   비율을 유지한 채 맞춰 준다), 박스를 키우면 다이어그램도 커진다. 줌/팬은 별도의 transform
+   레이어(.diagram-zoom-content)로 처리한다 - 리사이즈(레이아웃 크기)와 줌(시각적 확대)이
+   서로 다른 축이라 굳이 하나로 합치지 않았다. */
+.diagram-canvas {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  resize: vertical;
+  overflow: hidden;
+  height: 380px;
+  min-height: 180px;
+  max-height: 82vh;
+  border-radius: 8px;
+}
+
+.diagram-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+}
+.diagram-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(25, 29, 36, 0.88);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 3px;
+  backdrop-filter: blur(4px);
+}
+.diagram-toolbar-group button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+  line-height: 1;
+}
+.diagram-toolbar-group button:hover {
+  color: var(--text);
+  background: var(--ink-800);
+}
+.diagram-zoom-level {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  padding: 0 2px;
+  min-width: 34px;
+  text-align: center;
+}
+
+.diagram-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.diagram-viewport:active {
+  cursor: grabbing;
+}
+
+.diagram-zoom-content {
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+}
+
 /* ---------- graph / swimlane visualizations ---------- */
 
 .legend {
@@ -588,12 +666,24 @@ select {
   border-bottom: 1px solid var(--line-soft);
   display: flex;
   flex-direction: column;
-  max-height: 34vh;
+  overflow: hidden;
 }
 .rail-section.grow {
   flex: 1;
-  max-height: none;
 }
+
+.row-resizer {
+  height: 6px;
+  flex: none;
+  background: var(--line);
+  cursor: row-resize;
+  touch-action: none;
+}
+.row-resizer:hover,
+.row-resizer:active {
+  background: var(--amber-dim);
+}
+
 .rail-section-head {
   padding: 13px 16px 9px;
   font-family: var(--mono);
@@ -614,14 +704,40 @@ select {
   color: var(--text-dim);
 }
 
-.scrollable-log {
-  overflow-y: auto;
+.log-panel {
+  display: flex;
+  flex-direction: column;
   flex: 1;
+  min-height: 0;
+}
+
+.log-filter-row {
+  flex: none;
+  padding: 0 12px 8px;
+}
+.log-filter {
+  width: 100%;
+  background: var(--ink-900);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 6px 9px;
+  border-radius: 6px;
+}
+.log-filter::placeholder {
+  color: var(--text-faint);
+}
+.log-filter:focus {
+  outline: none;
+  border-color: var(--amber-dim);
 }
 
 .event-log {
   padding: 0 8px 10px;
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 .event-row {
   display: grid;
@@ -666,6 +782,15 @@ select {
 }
 .event-row.bad .name {
   color: var(--rose);
+}
+/* RAW LOG ↔ 다이어그램 양방향 강조 - selected는 지금 HitInspector에 뜬 그 히트,
+   highlighted는 다이어그램의 노드/마커에 마우스를 올렸을 때 관련된 히트들이다. */
+.event-row.selected {
+  background: rgba(240, 168, 104, 0.14);
+  box-shadow: inset 2px 0 0 var(--amber);
+}
+.event-row.highlighted {
+  background: var(--ink-800);
 }
 
 .doc-marker {

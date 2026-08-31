@@ -8,6 +8,7 @@ import { ScenarioTabs } from "./components/ScenarioTabs";
 import { ScenarioVisualization } from "./components/ScenarioVisualization";
 import { SemanticEventLog } from "./components/SemanticEventLog";
 import { TransportControls } from "./components/TransportControls";
+import { useResizableHeight } from "./hooks/useResizableHeight";
 import { useResizableRail } from "./hooks/useResizableRail";
 import { useDashboardSocket } from "./stomp/useDashboardSocket";
 import type { ScenarioMessage, ScenarioMeta, SemanticEvent, TraceEvent } from "./types";
@@ -66,6 +67,7 @@ export default function App() {
   const [selectedHit, setSelectedHit] = useState<TraceEvent | null>(null);
   const [running, setRunning] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hoveredHitIds, setHoveredHitIds] = useState<Set<number> | null>(null);
 
   const handleMessage = useCallback((message: ScenarioMessage) => {
     setLog((prev) => [...prev, message]);
@@ -85,6 +87,12 @@ export default function App() {
 
   const { connected, startScenario, sendCommand, sendHttpRequest } = useDashboardSocket(handleMessage);
   const { width: railWidth, startDrag: startRailDrag, stageRef } = useResizableRail();
+  const { height: semanticHeight, startDrag: startSemanticDrag } = useResizableHeight(
+    "trace-dash.semantic-height", 200, 90, 640,
+  );
+  const { height: rawLogHeight, startDrag: startRawLogDrag } = useResizableHeight(
+    "trace-dash.rawlog-height", 220, 90, 640,
+  );
 
   const hits = useMemo(() => log.filter((entry) => entry.type === "hit"), [log]);
   const hitCount = hits.length;
@@ -96,6 +104,7 @@ export default function App() {
     setSelectedHit(null);
     setRunning(false);
     setErrorMessage(null);
+    setHoveredHitIds(null);
     // snapshot 시나리오(condition-report)는 ScenarioCatalog에 등록돼 있지 않다 -
     // ScenarioSession의 재생 모델을 타지 않으므로 start()를 부를 대상이 없다.
     const meta = SCENARIOS.find((scenario) => scenario.key === key);
@@ -181,6 +190,8 @@ export default function App() {
                 semanticEvents={semanticEvents}
                 connected={connected}
                 onSendRequest={sendHttpRequest}
+                selectedHitId={selectedHit?.hitId ?? null}
+                onHoverHitIds={setHoveredHitIds}
               />
             )}
           </div>
@@ -195,20 +206,37 @@ export default function App() {
         />
 
         <div className="rail">
-          <div className="rail-section">
+          <div className="rail-section" style={{ flexBasis: `${semanticHeight}px`, flexGrow: 0 }}>
             <div className="rail-section-head">
               semantic events <span className="count">{semanticEvents.length}</span>
             </div>
             <SemanticEventLog entries={semanticEvents} />
           </div>
-          <div className="rail-section">
+          <div
+            className="row-resizer"
+            onPointerDown={startSemanticDrag}
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="semantic events 패널 높이 조절"
+          />
+          <div className="rail-section" style={{ flexBasis: `${rawLogHeight}px`, flexGrow: 0 }}>
             <div className="rail-section-head">
               raw log <span className="count">{log.length}</span>
             </div>
-            <div className="scrollable-log">
-              <RawEventLog entries={log} onSelectHit={handleSelectHit} />
-            </div>
+            <RawEventLog
+              entries={log}
+              onSelectHit={handleSelectHit}
+              selectedHitId={selectedHit?.hitId ?? null}
+              highlightedHitIds={hoveredHitIds}
+            />
           </div>
+          <div
+            className="row-resizer"
+            onPointerDown={startRawLogDrag}
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="raw log 패널 높이 조절"
+          />
           <div className="rail-section grow">
             <div className="rail-section-head">hit inspector</div>
             <HitInspector hit={selectedHit} />
