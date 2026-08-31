@@ -257,7 +257,12 @@ export function NewScenarioForm({ onCreated }: Props) {
 
       {useSourceCode && (
         <label className="field">
-          <span>Lab 클래스 소스 코드</span>
+          <span>
+            Lab 클래스 소스 코드 - 메서드 선언 바로 위에{" "}
+            <code>{'// @dashboard-label: "라벨 텍스트"'}</code>를 달아 두면, 손으로 해석기를
+            짜지 않아도 그 메서드에서 히트가 날 때마다 semantic 이벤트 로그에 그 라벨이
+            자동으로 나타납니다.
+          </span>
           <textarea
             className="mono"
             value={sourceCode}
@@ -267,7 +272,7 @@ export function NewScenarioForm({ onCreated }: Props) {
             }}
             rows={16}
             placeholder={
-              "package lab.dynamic;\n\npublic class MyLab {\n    public static void main(String[] args) {\n        // ...\n    }\n}"
+              'package lab.dynamic;\n\npublic class MyLab {\n    // @dashboard-label: "빈 생성 시작"\n    public static void main(String[] args) {\n        // ...\n    }\n}'
             }
           />
         </label>

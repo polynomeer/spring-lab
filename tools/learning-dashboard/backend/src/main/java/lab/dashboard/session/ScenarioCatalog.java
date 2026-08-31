@@ -2,10 +2,15 @@ package lab.dashboard.session;
 
 import java.io.File;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import lab.dashboard.interpret.ScenarioInterpreter;
 import lab.dashboard.scenario.DynamicScenarioCompiler;
+import lab.dashboard.scenario.InlineLabelInterpreter;
+import lab.dashboard.scenario.InlineLabelParser;
 import lab.dashboard.scenario.ScenarioCompilationException;
 import lab.dashboard.scenario.ScenarioDefinitionEntity;
 import lab.dashboard.scenario.ScenarioRepository;
@@ -60,6 +65,7 @@ public class ScenarioCatalog {
                 .collect(Collectors.joining(File.pathSeparator));
 
         boolean hasSourceCode = entity.getSourceCode() != null && !entity.getSourceCode().isBlank();
+        Supplier<ScenarioInterpreter> interpreterFactory = entity.getInterpreterKind().factory();
         if (hasSourceCode) {
             DynamicScenarioCompiler.CompileResult result =
                     compiler.compile(entity.getMainClass(), entity.getSourceCode(), classpath);
@@ -70,10 +76,19 @@ public class ScenarioCatalog {
             // 발견되도록 맨 앞에 둔다. 이 임시 디렉터리는 자식 JVM이 살아있는 동안 계속
             // 필요하므로 여기서 지우지 않는다(OS 임시 디렉터리 정리에 맡긴다).
             classpath = result.outputDir() + File.pathSeparator + classpath;
+
+            // 손으로 짠 해석기 없이도(interpreterKind는 사용자 시나리오에서 항상 NONE),
+            // 소스 코드 안의 "// @dashboard-label: ..." 주석만으로 최소한의 semantic
+            // 이벤트를 만든다(docs/plan/04-dynamic-scenario-design.md 7번 절). 라벨이
+            // 하나도 없으면 굳이 새 해석기로 바꾸지 않고 기존 NONE(원본 로그만)을 그대로 둔다.
+            Map<String, String> labels = InlineLabelParser.parseLabels(entity.getSourceCode());
+            if (!labels.isEmpty()) {
+                interpreterFactory = () -> new InlineLabelInterpreter(labels);
+            }
         }
 
         return new ScenarioDefinition(
                 entity.getName(), classpath, entity.getMainClass(), entity.getBreakpointSpec(),
-                entity.getInterpreterKind().factory(), hasSourceCode);
+                interpreterFactory, hasSourceCode);
     }
 }
