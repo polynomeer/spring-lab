@@ -4,6 +4,8 @@
 
 **구현 현황**: 8번 절의 0~8단계 전부 구현 완료 — [`tools/learning-dashboard`](../../tools/learning-dashboard). 7개 시나리오(6.1~6.4 + event-multicast + mvc-exception-priority + condition-report)가 모두 라이브로 동작한다 - 설계 문서가 애초에 "범위 밖"으로 미뤄 뒀던 3개 후보(6번 절)까지 전부 구현됐다. condition-report(6.5절)만 다른 시나리오들과 근본적으로 다른 구조다 - JDI 스텝 실행이 아니라 "프로퍼티를 바꿔 다시 실행하고 리포트 트리를 보는" 1회성 구조라 `ScenarioSession`/`TracerServer` 파이프라인을 타지 않는다.
 
+**다음 확장**: 9번 절이 "강한 인터페이스로 플러그인화를 미리 설계하지 않는다"고 못 박아 뒀던 전제를, 시나리오 7개를 실제로 만들어 본 뒤 재검토한 결과가 [`04-dynamic-scenario-design.md`](04-dynamic-scenario-design.md)다 - 하드코딩된 `ScenarioCatalog`를 DB 기반으로 바꾸고, 기존 실험 모듈을 브라우저에서 즉석으로 골라 새 시나리오로 등록하거나 아예 새 코드를 작성해 서버가 컴파일·실행하게 하는 설계.
+
 ## 0. 결정된 전제
 
 세 가지 핵심 결정을 먼저 확정한다(문서 전체가 이 위에서 갈린다):
