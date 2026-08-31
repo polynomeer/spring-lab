@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { ConditionReportPanel } from "./components/ConditionReportPanel";
 import { HitInspector } from "./components/HitInspector";
@@ -7,6 +8,7 @@ import { ScenarioTabs } from "./components/ScenarioTabs";
 import { ScenarioVisualization } from "./components/ScenarioVisualization";
 import { SemanticEventLog } from "./components/SemanticEventLog";
 import { TransportControls } from "./components/TransportControls";
+import { useResizableRail } from "./hooks/useResizableRail";
 import { useDashboardSocket } from "./stomp/useDashboardSocket";
 import type { ScenarioMessage, ScenarioMeta, SemanticEvent, TraceEvent } from "./types";
 
@@ -76,6 +78,7 @@ export default function App() {
   }, []);
 
   const { connected, startScenario, sendCommand, sendHttpRequest } = useDashboardSocket(handleMessage);
+  const { width: railWidth, startDrag: startRailDrag, stageRef } = useResizableRail();
 
   const hits = useMemo(() => log.filter((entry) => entry.type === "hit"), [log]);
   const hitCount = hits.length;
@@ -115,7 +118,11 @@ export default function App() {
         <ScenarioTabs scenarios={SCENARIOS} active={activeScenario} onSelect={selectScenario} />
       </div>
 
-      <div className="stage">
+      <div
+        className="stage"
+        ref={stageRef}
+        style={{ "--rail-width": `${railWidth}px` } as CSSProperties}
+      >
         <div className="canvas-col">
           <div className="scenario-head">
             <div className="scenario-title-group">
@@ -162,6 +169,14 @@ export default function App() {
             )}
           </div>
         </div>
+
+        <div
+          className="rail-resizer"
+          onPointerDown={startRailDrag}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="우측 패널 너비 조절"
+        />
 
         <div className="rail">
           <div className="rail-section">
