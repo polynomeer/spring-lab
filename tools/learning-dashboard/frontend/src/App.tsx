@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { ConditionReportPanel } from "./components/ConditionReportPanel";
@@ -60,8 +60,19 @@ const SCENARIOS: ScenarioMeta[] = [
   },
 ];
 
+const SCENARIO_STORAGE_KEY = "trace-dash.active-scenario";
+
+function readStoredScenario(): string {
+  try {
+    const raw = localStorage.getItem(SCENARIO_STORAGE_KEY);
+    return raw && SCENARIOS.some((scenario) => scenario.key === raw) ? raw : SCENARIOS[0].key;
+  } catch {
+    return SCENARIOS[0].key;
+  }
+}
+
 export default function App() {
-  const [activeScenario, setActiveScenario] = useState(SCENARIOS[0].key);
+  const [activeScenario, setActiveScenario] = useState(readStoredScenario);
   const [log, setLog] = useState<ScenarioMessage[]>([]);
   const [semanticEvents, setSemanticEvents] = useState<SemanticEvent[]>([]);
   const [selectedHit, setSelectedHit] = useState<TraceEvent | null>(null);
@@ -86,6 +97,22 @@ export default function App() {
   }, []);
 
   const { connected, startScenario, sendCommand, sendHttpRequest } = useDashboardSocket(handleMessage);
+
+  // 새로고침 후 마지막으로 보던 시나리오가 activeScenario 초기값으로 복원되지만, 실제 라이브
+  // 세션은 별도로 시작해 줘야 한다(탭을 다시 클릭하지 않아도 되게) - STOMP 연결이 처음
+  // 붙는 순간 딱 한 번만 실행한다(재연결마다 세션을 다시 시작해 버리면 안 되므로 ref로 막는다).
+  const hasAutoStartedRef = useRef(false);
+  useEffect(() => {
+    if (!connected || hasAutoStartedRef.current) {
+      return;
+    }
+    hasAutoStartedRef.current = true;
+    const meta = SCENARIOS.find((scenario) => scenario.key === activeScenario);
+    if (meta?.interactionMode !== "snapshot") {
+      startScenario(activeScenario);
+    }
+  }, [connected, activeScenario, startScenario]);
+
   const { width: railWidth, startDrag: startRailDrag, stageRef } = useResizableRail();
   const { height: semanticHeight, startDrag: startSemanticDrag } = useResizableHeight(
     "trace-dash.semantic-height", 200, 90, 640,
@@ -99,6 +126,11 @@ export default function App() {
 
   const selectScenario = (key: string) => {
     setActiveScenario(key);
+    try {
+      localStorage.setItem(SCENARIO_STORAGE_KEY, key);
+    } catch {
+      // 프라이빗 모드 등에서 저장이 막혀도 시나리오 선택 자체는 계속 동작해야 한다.
+    }
     setLog([]);
     setSemanticEvents([]);
     setSelectedHit(null);
