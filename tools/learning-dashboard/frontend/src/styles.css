@@ -953,7 +953,8 @@ select {
   color: var(--text-dim);
 }
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   background: var(--ink-950);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -963,7 +964,8 @@ select {
   font-size: 13px;
 }
 .field input:focus,
-.field textarea:focus {
+.field textarea:focus,
+.field select:focus {
   outline: none;
   border-color: var(--amber-dim);
 }

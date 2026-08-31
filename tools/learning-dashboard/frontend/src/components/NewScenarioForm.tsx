@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
-import { createScenario, fetchAvailableModulePaths, fetchCompilerStatus } from "../api/scenarioApi";
+import { createScenario, fetchAvailableModulePaths, fetchCompilerStatus, fetchScenarios } from "../api/scenarioApi";
 import type { SavedScenario } from "../types";
 
 interface Props {
@@ -31,6 +31,7 @@ export function NewScenarioForm({ onCreated }: Props) {
   const [availableModules, setAvailableModules] = useState<string[]>([]);
   const [modulesLoading, setModulesLoading] = useState(true);
   const [compilerAvailable, setCompilerAvailable] = useState<boolean | null>(null);
+  const [existingScenarios, setExistingScenarios] = useState<SavedScenario[]>([]);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -51,10 +52,32 @@ export function NewScenarioForm({ onCreated }: Props) {
     fetchCompilerStatus()
       .then((status) => setCompilerAvailable(status.available))
       .catch(() => setCompilerAvailable(false));
+    // 새 API를 만들 필요가 없다 - GET /api/scenarios는 이미 있고, "복제할 시나리오 목록"도
+    // 결국 저장된 시나리오 전체 목록일 뿐이다(docs/plan/04-dynamic-scenario-design.md 7번 절).
+    fetchScenarios()
+      .then(setExistingScenarios)
+      .catch(() => setExistingScenarios([]));
   }, []);
 
   const toggleModule = (path: string) => {
     setSelectedModules((prev) => (prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]));
+  };
+
+  // "복제해서 수정" - 백지에서 시작하지 않아도 되게, 골라 둔 기존 시나리오의 필드를 폼에
+  // 그대로 채운다. 이름/제목만 "-copy"/"(복제)"를 붙여 원본과 즉시 충돌하지 않게 한다 -
+  // 어차피 저장 전에 사용자가 원하는 만큼 고칠 수 있다.
+  const applyClone = (scenario: SavedScenario) => {
+    setName(`${scenario.name}-copy`);
+    setTitle(`${scenario.title} (복제)`);
+    setDescription(scenario.description);
+    setSelectedModules(scenario.gradleModulePaths);
+    setMainClass(scenario.mainClass);
+    setBreakpointSpec(scenario.breakpointSpec);
+    const hasSource = Boolean(scenario.sourceCode && scenario.sourceCode.trim().length > 0);
+    setUseSourceCode(hasSource);
+    setSourceCode(scenario.sourceCode ?? "");
+    setRiskyApis([]);
+    setError(null);
   };
 
   const resetForm = () => {
@@ -83,6 +106,13 @@ export function NewScenarioForm({ onCreated }: Props) {
       });
       onCreated(created);
       resetForm();
+      // 방금 만든 시나리오도 "복제할 시나리오" 목록에 곧바로 나타나야 한다 - 이 폼은
+      // 저장 후에도 계속 열려 있을 수 있다(연달아 여러 개를 만드는 경우).
+      fetchScenarios()
+        .then(setExistingScenarios)
+        .catch(() => {
+          // 목록 새로고침 실패는 조용히 넘어간다 - 다음에 폼을 열 때 다시 시도된다.
+        });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -127,6 +157,28 @@ export function NewScenarioForm({ onCreated }: Props) {
         켜서 즉석에서 작성한 Lab 클래스를 서버가 컴파일해 바로 실행합니다. 저장하면 목록에
         즉시 새 탭으로 나타납니다.
       </p>
+
+      {existingScenarios.length > 0 && (
+        <label className="field">
+          <span>기존 시나리오에서 복제 (선택)</span>
+          <select
+            value=""
+            onChange={(e) => {
+              const scenario = existingScenarios.find((s) => String(s.id) === e.target.value);
+              if (scenario) {
+                applyClone(scenario);
+              }
+            }}
+          >
+            <option value="">(복제 안 함 - 새로 작성)</option>
+            {existingScenarios.map((scenario) => (
+              <option key={scenario.id} value={scenario.id}>
+                {scenario.title}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {error && (
         <div className="new-scenario-error" role="alert">
