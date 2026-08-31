@@ -63,6 +63,8 @@ export interface SavedScenario {
   gradleModulePaths: string[];
   mainClass: string;
   breakpointSpec: string;
+  // null/빈 문자열이면 1단계(기존 모듈 기반) 시나리오, 값이 있으면 2단계(즉석 코드 작성).
+  sourceCode: string | null;
   interpreterKind: string;
   createdAt: string;
 }
@@ -74,6 +76,7 @@ export interface ScenarioSaveRequest {
   gradleModulePaths: string[];
   mainClass: string;
   breakpointSpec: string;
+  sourceCode?: string;
 }
 
 // lab.dashboard.conditionreport.ConditionReportWebSocketController가 /topic/condition-report로

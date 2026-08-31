@@ -32,7 +32,7 @@ class ScenarioSessionTest {
                 System.getProperty("java.class.path"),
                 "lab.tools.jdi.fixtures.SampleTarget",
                 "lab.tools.jdi.fixtures.SampleTarget#greet",
-                () -> hit -> List.of(SemanticEvent.of("FIXTURE_HIT", hit.hitId())));
+                () -> hit -> List.of(SemanticEvent.of("FIXTURE_HIT", hit.hitId())), false);
 
         session.start(definition);
         awaitEventOfType(RawHitReceived.class, Duration.ofSeconds(15));
@@ -64,7 +64,7 @@ class ScenarioSessionTest {
                 System.getProperty("java.class.path"),
                 "lab.tools.jdi.fixtures.SampleTarget",
                 "# a comment line, ignored by JdiSupport\n\nlab.tools.jdi.fixtures.SampleTarget#greet",
-                () -> hit -> List.of(SemanticEvent.of("FIXTURE_HIT", hit.hitId())));
+                () -> hit -> List.of(SemanticEvent.of("FIXTURE_HIT", hit.hitId())), false);
 
         session.start(definition);
         awaitEventOfType(RawHitReceived.class, Duration.ofSeconds(15));
@@ -73,6 +73,41 @@ class ScenarioSessionTest {
         awaitEventOfType(ScenarioExited.class, Duration.ofSeconds(15));
 
         assertThat(events.stream().filter(RawHitReceived.class::isInstance)).hasSize(2);
+    }
+
+    // docs/plan/04-dynamic-scenario-design.md 5번 절 - dynamicallyCompiled=true인 시나리오만
+    // 타임아웃 대상이라는 것과, 실제로 무한루프를 넣으면 그 타임아웃이 정말로 프로세스를
+    // 강제 종료하는지를 함께 확인한다. 실제 몇 분을 기다리지 않도록 짧은 타임아웃을 주는
+    // package-private 생성자를 쓴다.
+    @Test
+    void dynamicallyCompiledScenarioThatNeverExitsIsKilledByTheTimeout() throws Exception {
+        ScenarioSession shortTimeoutSession = new ScenarioSession(events::add, Duration.ofSeconds(1));
+        try {
+            ScenarioDefinition definition = new ScenarioDefinition(
+                    "fixture-infinite",
+                    System.getProperty("java.class.path"),
+                    "lab.tools.jdi.fixtures.InfiniteLoopTarget",
+                    "lab.tools.jdi.fixtures.InfiniteLoopTarget#tick",
+                    () -> hit -> List.of(), true);
+
+            shortTimeoutSession.start(definition);
+            awaitEventOfType(RawHitReceived.class, Duration.ofSeconds(15));
+
+            awaitEventOfType(ScenarioTimedOut.class, Duration.ofSeconds(15));
+
+            ScenarioTimedOut timedOut = events.stream()
+                    .filter(ScenarioTimedOut.class::isInstance)
+                    .map(ScenarioTimedOut.class::cast)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(timedOut.scenarioName()).isEqualTo("fixture-infinite");
+
+            // ScenarioExited가 절대 안 온다는 것도 확인한다 - 자연 종료가 아니라 강제
+            // 종료라는 뜻이다(무한루프이므로 스스로는 절대 끝나지 않는다).
+            assertThat(events.stream().anyMatch(ScenarioExited.class::isInstance)).isFalse();
+        } finally {
+            shortTimeoutSession.stop();
+        }
     }
 
     private void awaitEventOfType(Class<?> type, Duration timeout) throws InterruptedException {

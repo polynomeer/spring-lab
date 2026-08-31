@@ -1,28 +1,45 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
-import { createScenario, fetchAvailableModulePaths } from "../api/scenarioApi";
+import { createScenario, fetchAvailableModulePaths, fetchCompilerStatus } from "../api/scenarioApi";
 import type { SavedScenario } from "../types";
 
 interface Props {
   onCreated: (scenario: SavedScenario) => void;
 }
 
+// docs/plan/04-dynamic-scenario-design.md 5번 절 - 완전한 샌드박싱이 아니라 실수(fat-finger)
+// 방지용 가벼운 정적 경고다. 저장을 막지는 않는다 - "그래도 저장" 버튼으로 넘어갈 수 있다.
+const RISKY_PATTERNS: { pattern: RegExp; label: string }[] = [
+  { pattern: /Runtime\s*\.\s*getRuntime\s*\(\s*\)\s*\.\s*exec/, label: "Runtime.exec" },
+  { pattern: /new\s+ProcessBuilder/, label: "ProcessBuilder" },
+  { pattern: /System\s*\.\s*exit/, label: "System.exit" },
+  { pattern: /Files\s*\.\s*delete/, label: "Files.delete" },
+];
+
+function findRiskyApiUsages(source: string): string[] {
+  return RISKY_PATTERNS.filter(({ pattern }) => pattern.test(source)).map(({ label }) => label);
+}
+
 /**
- * "이미 있는 모듈을 골라 새 시나리오로 등록"하는 1단계 폼(docs/plan/04-dynamic-scenario-design.md).
- * 새 코드를 작성하는 게 아니라, 이 저장소에 이미 컴파일돼 있는 실험 모듈의 main() 클래스를
- * 어떤 브레이크포인트로 관찰할지만 고른다 - 그래서 컴파일 단계도, 그에 따르는 위험(실행
- * 타임아웃 등)도 이 폼에는 없다. 2단계(즉석 코드 작성)는 별도 확장으로 남겨 둔다.
+ * "이미 있는 모듈을 골라 새 시나리오로 등록"(1단계)과 "직접 코드를 작성해서 서버가
+ * 컴파일·실행"(2단계, docs/plan/04-dynamic-scenario-design.md)을 함께 다루는 폼. 컴파일러가
+ * 없는 환경(JRE로 실행 중 등)에서는 2단계 토글 자체를 비활성화한다 - 1단계 기능은 컴파일러
+ * 없이도 그대로 동작해야 하므로 기능 저하가 아니라 부분 비활성화다.
  */
 export function NewScenarioForm({ onCreated }: Props) {
   const [availableModules, setAvailableModules] = useState<string[]>([]);
   const [modulesLoading, setModulesLoading] = useState(true);
+  const [compilerAvailable, setCompilerAvailable] = useState<boolean | null>(null);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedModules, setSelectedModules] = useState<string[]>([]);
   const [mainClass, setMainClass] = useState("");
   const [breakpointSpec, setBreakpointSpec] = useState("");
+  const [useSourceCode, setUseSourceCode] = useState(false);
+  const [sourceCode, setSourceCode] = useState("");
+  const [riskyApis, setRiskyApis] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,10 +48,46 @@ export function NewScenarioForm({ onCreated }: Props) {
       .then(setAvailableModules)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setModulesLoading(false));
+    fetchCompilerStatus()
+      .then((status) => setCompilerAvailable(status.available))
+      .catch(() => setCompilerAvailable(false));
   }, []);
 
   const toggleModule = (path: string) => {
     setSelectedModules((prev) => (prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]));
+  };
+
+  const resetForm = () => {
+    setName("");
+    setTitle("");
+    setDescription("");
+    setSelectedModules([]);
+    setMainClass("");
+    setBreakpointSpec("");
+    setUseSourceCode(false);
+    setSourceCode("");
+    setRiskyApis([]);
+  };
+
+  const doSave = async () => {
+    setSaving(true);
+    try {
+      const created = await createScenario({
+        name: name.trim(),
+        title: title.trim(),
+        description: description.trim(),
+        gradleModulePaths: selectedModules,
+        mainClass: mainClass.trim(),
+        breakpointSpec,
+        sourceCode: useSourceCode ? sourceCode : undefined,
+      });
+      onCreated(created);
+      resetForm();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const submit = async (event: FormEvent) => {
@@ -45,42 +98,51 @@ export function NewScenarioForm({ onCreated }: Props) {
       setError("이름, 제목, 실행할 클래스, 브레이크포인트 스펙을 입력하고 모듈을 하나 이상 골라 주세요.");
       return;
     }
-
-    setSaving(true);
-    try {
-      const created = await createScenario({
-        name: name.trim(),
-        title: title.trim(),
-        description: description.trim(),
-        gradleModulePaths: selectedModules,
-        mainClass: mainClass.trim(),
-        breakpointSpec,
-      });
-      onCreated(created);
-      setName("");
-      setTitle("");
-      setDescription("");
-      setSelectedModules([]);
-      setMainClass("");
-      setBreakpointSpec("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
+    if (useSourceCode && !sourceCode.trim()) {
+      setError("직접 코드 작성을 켰으면 소스 코드를 입력해야 합니다.");
+      return;
     }
+
+    if (useSourceCode) {
+      const risky = findRiskyApiUsages(sourceCode);
+      if (risky.length > 0) {
+        // 저장을 막지 않는다 - 경고만 띄우고, "그래도 저장" 버튼을 눌러야 실제로 진행된다.
+        setRiskyApis(risky);
+        return;
+      }
+    }
+
+    await doSave();
+  };
+
+  const forceSave = async () => {
+    setRiskyApis([]);
+    await doSave();
   };
 
   return (
     <form className="new-scenario-form" onSubmit={(event) => void submit(event)}>
       <p className="new-scenario-intro">
-        이미 이 저장소에 있는 실험 모듈을 골라 새 시나리오로 등록합니다 - 새 코드를 짜는 게
-        아니라, 어느 모듈의 어느 <code>main()</code> 클래스를 어떤 브레이크포인트로 관찰할지만
-        정하면 됩니다. 저장하면 목록에 즉시 새 탭으로 나타납니다.
+        이미 이 저장소에 있는 실험 모듈을 골라 새 시나리오로 등록하거나, 아래 "직접 코드 작성"을
+        켜서 즉석에서 작성한 Lab 클래스를 서버가 컴파일해 바로 실행합니다. 저장하면 목록에
+        즉시 새 탭으로 나타납니다.
       </p>
 
       {error && (
         <div className="new-scenario-error" role="alert">
           {error}
+        </div>
+      )}
+
+      {riskyApis.length > 0 && (
+        <div className="new-scenario-warning" role="alert">
+          <p>
+            코드에 위험할 수 있는 API가 보입니다: <strong>{riskyApis.join(", ")}</strong> - 실수로
+            넣은 게 아닌지 확인하세요.
+          </p>
+          <button type="button" onClick={() => void forceSave()} disabled={saving}>
+            {saving ? "저장 중..." : "그래도 저장"}
+          </button>
         </div>
       )}
 
@@ -116,13 +178,48 @@ export function NewScenarioForm({ onCreated }: Props) {
       </div>
 
       <label className="field">
-        <span>실행할 클래스 (FQCN, public static void main 필요)</span>
+        <span>실행할 클래스 (FQCN, public static void main 필요{useSourceCode ? " - 아래 코드의 package/class와 정확히 일치해야 함" : ""})</span>
         <input
           value={mainClass}
           onChange={(e) => setMainClass(e.target.value)}
           placeholder="예: lab.experiments.customscope.TenantScopeLab"
         />
       </label>
+
+      <label className="field new-scenario-toggle">
+        <input
+          type="checkbox"
+          checked={useSourceCode}
+          disabled={compilerAvailable !== true}
+          onChange={(e) => {
+            setUseSourceCode(e.target.checked);
+            setRiskyApis([]);
+          }}
+        />
+        <span>
+          직접 코드 작성 (서버가 컴파일해서 실행)
+          {compilerAvailable === false && " - 이 서버에는 컴파일러가 없어 사용할 수 없습니다(JDK로 실행해야 함)"}
+          {compilerAvailable === null && " - 확인 중..."}
+        </span>
+      </label>
+
+      {useSourceCode && (
+        <label className="field">
+          <span>Lab 클래스 소스 코드</span>
+          <textarea
+            className="mono"
+            value={sourceCode}
+            onChange={(e) => {
+              setSourceCode(e.target.value);
+              setRiskyApis([]);
+            }}
+            rows={16}
+            placeholder={
+              "package lab.dynamic;\n\npublic class MyLab {\n    public static void main(String[] args) {\n        // ...\n    }\n}"
+            }
+          />
+        </label>
+      )}
 
       <label className="field">
         <span>브레이크포인트 스펙 (한 줄에 하나, "Class#method1,method2" - # 주석/빈 줄 허용)</span>

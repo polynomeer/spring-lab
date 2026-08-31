@@ -8,6 +8,7 @@ import lab.dashboard.interpret.ScenarioInterpreter;
 import lab.tools.jdi.TraceEvent;
 import lab.tools.jdi.TracerCommand;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
@@ -19,8 +20,13 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,13 +50,28 @@ public class ScenarioSession {
     // 이 마커를 찍지 않으므로 매칭될 일이 없다.
     private static final Pattern READY_PORT_PATTERN = Pattern.compile("^EMBEDDED_SERVER_READY port=(\\d+)$");
     private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
+    private static final Duration DEFAULT_DYNAMIC_SCENARIO_TIMEOUT = Duration.ofSeconds(120);
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final ApplicationEventPublisher eventPublisher;
+    private final Duration dynamicScenarioTimeout;
+    private final ScheduledExecutorService timeoutScheduler =
+            Executors.newSingleThreadScheduledExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "scenario-timeout");
+                thread.setDaemon(true);
+                return thread;
+            });
     private final AtomicReference<Running> running = new AtomicReference<>();
 
+    @Autowired
     public ScenarioSession(ApplicationEventPublisher eventPublisher) {
+        this(eventPublisher, DEFAULT_DYNAMIC_SCENARIO_TIMEOUT);
+    }
+
+    /** 테스트가 실제로 몇 분씩 기다리지 않고도 타임아웃 동작을 검증할 수 있도록 짧은 값을 넣을 수 있게 열어 둔다. */
+    ScenarioSession(ApplicationEventPublisher eventPublisher, Duration dynamicScenarioTimeout) {
         this.eventPublisher = eventPublisher;
+        this.dynamicScenarioTimeout = dynamicScenarioTimeout;
     }
 
     public synchronized void start(ScenarioDefinition definition) {
@@ -78,8 +99,19 @@ public class ScenarioSession {
             Process process = builder.start();
 
             PrintWriter stdin = new PrintWriter(process.getOutputStream(), true);
-            Running current = new Running(process, stdin, definition.name(), new AtomicReference<>());
+            Running current = new Running(process, stdin, definition.name(), new AtomicReference<>(),
+                    new AtomicReference<>());
             running.set(current);
+
+            // 즉석 코드 작성 시나리오(docs/plan/04-dynamic-scenario-design.md 5번 절)만
+            // 대상이다 - 기존 6개 카탈로그 시나리오는 이미 검증된 코드이고, dispatcher-flow처럼
+            // 사용자가 직접 요청을 보낼 때까지 무기한 기다리는 것도 있어서 일괄 타임아웃을
+            // 걸면 안 된다.
+            if (definition.dynamicallyCompiled()) {
+                ScheduledFuture<?> timeoutFuture = timeoutScheduler.schedule(
+                        () -> onTimeout(current), dynamicScenarioTimeout.toSeconds(), TimeUnit.SECONDS);
+                current.timeoutFuture().set(timeoutFuture);
+            }
 
             ScenarioInterpreter interpreter = definition.interpreterFactory().get();
             Thread reader = new Thread(() -> pump(current, interpreter));
@@ -88,6 +120,16 @@ public class ScenarioSession {
         } catch (IOException e) {
             throw new IllegalStateException("failed to launch scenario " + definition.name(), e);
         }
+    }
+
+    private synchronized void onTimeout(Running target) {
+        // 이 타이머가 도는 사이 세션이 이미 자연 종료됐거나 다른 시나리오로 교체됐을 수
+        // 있다 - identity로 정확히 지금 이 타이머가 지키던 세션이 맞는지 확인한 뒤에만 죽인다.
+        if (running.get() != target) {
+            return;
+        }
+        eventPublisher.publishEvent(new ScenarioTimedOut(target.scenarioName(), dynamicScenarioTimeout.toSeconds()));
+        stop();
     }
 
     public synchronized void sendCommand(String cmd, Long intervalMs) {
@@ -141,6 +183,14 @@ public class ScenarioSession {
         Running current = running.getAndSet(null);
         if (current == null) {
             return;
+        }
+        ScheduledFuture<?> timeoutFuture = current.timeoutFuture().get();
+        if (timeoutFuture != null) {
+            // 세션이 자연 종료되거나 새 세션으로 교체될 때도 stop()을 거치므로, 여기서
+            // 취소해 두지 않으면 이미 끝난 세션에 대한 타이머가 나중에 헛되이 또 발화한다
+            // (onTimeout()의 identity 체크가 실제로 해를 끼치는 건 막아 주지만, 안 쓰는
+            // 타이머를 계속 스케줄러에 남겨 두는 건 낭비다).
+            timeoutFuture.cancel(false);
         }
         sendCommandTo(current, TracerCommand.QUIT, null);
         current.process().destroyForcibly();
@@ -198,12 +248,20 @@ public class ScenarioSession {
             }
             case "exited" -> {
                 eventPublisher.publishEvent(new ScenarioExited(scenarioName, node.path("totalHits").asInt()));
+                ScheduledFuture<?> timeoutFuture = current.timeoutFuture().get();
+                if (timeoutFuture != null) {
+                    // 정상 종료됐으니 아직 안 울린 타임아웃 타이머가 있다면 헛되이 나중에
+                    // 발화하지 않도록 취소한다(무슨 일이 나지는 않지만 - onTimeout()의 identity
+                    // 체크가 이미 안전하게 무시한다 - 스케줄러에 계속 남겨 둘 이유가 없다).
+                    timeoutFuture.cancel(false);
+                }
                 running.set(null);
             }
             default -> { }
         }
     }
 
-    private record Running(Process process, PrintWriter stdin, String scenarioName, AtomicReference<Integer> readyPort) {
+    private record Running(Process process, PrintWriter stdin, String scenarioName,
+                            AtomicReference<Integer> readyPort, AtomicReference<ScheduledFuture<?>> timeoutFuture) {
     }
 }

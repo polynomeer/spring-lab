@@ -6,6 +6,7 @@ import lab.dashboard.session.ScenarioExited;
 import lab.dashboard.session.ScenarioHttpResponseReceived;
 import lab.dashboard.session.ScenarioSession;
 import lab.dashboard.session.ScenarioStdoutReceived;
+import lab.dashboard.session.ScenarioTimedOut;
 import lab.dashboard.session.SemanticEventReceived;
 
 import org.springframework.context.event.EventListener;
@@ -91,6 +92,17 @@ public class ScenarioWebSocketController {
     public void onExited(ScenarioExited event) {
         messagingTemplate.convertAndSend("/topic/scenario",
                 Map.of("type", "exited", "scenario", event.scenarioName(), "totalHits", event.totalHits()));
+    }
+
+    /**
+     * 무한루프 같은 즉석 코드가 실행 타임아웃에 걸려 강제 종료됐다는 신호(5번 절 안전장치) -
+     * "unknown scenario"/컴파일 실패와 같은 {@code {"type":"error"}} 모양으로 통일해서
+     * 프론트가 이미 갖고 있는 에러 배너를 그대로 재사용한다.
+     */
+    @EventListener
+    public void onTimedOut(ScenarioTimedOut event) {
+        messagingTemplate.convertAndSend("/topic/scenario", Map.of("type", "error", "message",
+                "실행 시간이 " + event.timeoutSeconds() + "초를 넘어 강제 종료했습니다 - 무한루프가 있는지 확인하세요."));
     }
 
     @EventListener

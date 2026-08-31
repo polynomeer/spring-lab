@@ -76,11 +76,19 @@ public class ScenarioDefinitionEntity {
 
     public ScenarioDefinitionEntity(String name, String title, String description, List<String> gradleModulePaths,
                                      String mainClass, String breakpointSpec, InterpreterKind interpreterKind) {
+        this(name, title, description, gradleModulePaths, mainClass, null, breakpointSpec, interpreterKind);
+    }
+
+    /** 2단계(즉석 코드 작성) 시나리오용 - sourceCode가 채워진다. */
+    public ScenarioDefinitionEntity(String name, String title, String description, List<String> gradleModulePaths,
+                                     String mainClass, String sourceCode, String breakpointSpec,
+                                     InterpreterKind interpreterKind) {
         this.name = name;
         this.title = title;
         this.description = description;
         this.gradleModulePaths = new ArrayList<>(gradleModulePaths);
         this.mainClass = mainClass;
+        this.sourceCode = sourceCode;
         this.breakpointSpec = breakpointSpec;
         this.interpreterKind = interpreterKind;
     }
@@ -117,14 +125,15 @@ public class ScenarioDefinitionEntity {
         return List.copyOf(gradleModulePaths);
     }
 
-    /** 1단계 REST API가 쓰는 전체 필드 교체 - id/interpreterKind는 건드리지 않는다. */
+    /** REST API가 쓰는 전체 필드 교체 - id/interpreterKind는 건드리지 않는다. */
     public void update(String name, String title, String description, List<String> gradleModulePaths,
-                        String mainClass, String breakpointSpec) {
+                        String mainClass, String sourceCode, String breakpointSpec) {
         this.name = name;
         this.title = title;
         this.description = description;
         this.gradleModulePaths = new ArrayList<>(gradleModulePaths);
         this.mainClass = mainClass;
+        this.sourceCode = sourceCode;
         this.breakpointSpec = breakpointSpec;
     }
 

@@ -2,6 +2,7 @@ package lab.dashboard.session;
 
 import java.nio.file.Path;
 
+import lab.dashboard.scenario.DynamicScenarioCompiler;
 import lab.dashboard.scenario.ScenarioRepository;
 import lab.dashboard.scenario.ScenarioSeedData;
 
@@ -25,7 +26,7 @@ class ScenarioCatalogTest {
         Path repoRoot = ScenarioSeedData.findRepoRoot(Path.of(System.getProperty("user.dir")));
         repository.saveAll(ScenarioSeedData.defaults(repoRoot));
 
-        ScenarioCatalog catalog = new ScenarioCatalog(repository, new ClasspathResolver());
+        ScenarioCatalog catalog = new ScenarioCatalog(repository, new ClasspathResolver(), new DynamicScenarioCompiler());
 
         assertThat(catalog.scenarioNames()).containsExactly(
                 "bean-lifecycle", "aop-proxy", "tx-propagation", "dispatcher-flow", "event-multicast",

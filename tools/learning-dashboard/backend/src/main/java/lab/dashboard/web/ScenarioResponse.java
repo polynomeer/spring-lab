@@ -14,6 +14,7 @@ public record ScenarioResponse(
         List<String> gradleModulePaths,
         String mainClass,
         String breakpointSpec,
+        String sourceCode,
         String interpreterKind,
         Instant createdAt) {
 
@@ -26,6 +27,7 @@ public record ScenarioResponse(
                 entity.getGradleModulePaths(),
                 entity.getMainClass(),
                 entity.getBreakpointSpec(),
+                entity.getSourceCode(),
                 entity.getInterpreterKind().name(),
                 entity.getCreatedAt());
     }

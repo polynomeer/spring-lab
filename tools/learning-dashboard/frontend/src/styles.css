@@ -901,6 +901,44 @@ select {
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 13px;
+  /* 컴파일 진단 메시지는 여러 줄(\n으로 이어붙임)일 수 있다 - 그대로 줄바꿈해 보여준다. */
+  white-space: pre-wrap;
+  font-family: var(--mono);
+}
+.new-scenario-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  border: 1px solid var(--amber-dim);
+  background: rgba(240, 168, 104, 0.1);
+  color: var(--amber);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+.new-scenario-warning p {
+  margin: 0;
+}
+.new-scenario-warning button {
+  border: 1px solid var(--amber-dim);
+  background: transparent;
+  color: var(--amber);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.new-scenario-warning button:hover:not(:disabled) {
+  background: var(--amber-dim);
+  color: var(--ink-950);
+}
+.new-scenario-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.new-scenario-toggle input[type="checkbox"] {
+  width: auto;
 }
 .new-scenario-hint {
   color: var(--text-faint);

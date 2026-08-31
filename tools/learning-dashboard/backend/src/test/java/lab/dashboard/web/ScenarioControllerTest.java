@@ -44,7 +44,7 @@ class ScenarioControllerTest {
         ScenarioSaveRequest create = new ScenarioSaveRequest(
                 "controller-test-scenario", "컨트롤러 테스트용", "임시 시나리오",
                 List.of("experiments:ioc-container-lab"), "lab.experiments.ioc.BeanFactoryLab",
-                "org.springframework.beans.factory.support.DefaultListableBeanFactory#getBean");
+                "org.springframework.beans.factory.support.DefaultListableBeanFactory#getBean", null);
 
         ResponseEntity<ScenarioResponse> created = rest.postForEntity(url("/api/scenarios"), create, ScenarioResponse.class);
         assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -56,7 +56,7 @@ class ScenarioControllerTest {
         ScenarioSaveRequest update = new ScenarioSaveRequest(
                 "controller-test-scenario", "제목을 바꿈", "설명도 바꿈",
                 List.of("experiments:ioc-container-lab"), "lab.experiments.ioc.BeanFactoryLab",
-                "org.springframework.beans.factory.support.DefaultListableBeanFactory#getBean");
+                "org.springframework.beans.factory.support.DefaultListableBeanFactory#getBean", null);
         rest.put(url("/api/scenarios/" + id), update);
 
         ScenarioResponse[] afterUpdate = rest.getForObject(url("/api/scenarios"), ScenarioResponse[].class);
@@ -78,7 +78,7 @@ class ScenarioControllerTest {
         ScenarioSaveRequest duplicate = new ScenarioSaveRequest(
                 "bean-lifecycle", "이미 있는 이름", "설명",
                 List.of("experiments:ioc-container-lab"), "lab.experiments.ioc.BeanFactoryLab",
-                "org.springframework.beans.factory.support.DefaultListableBeanFactory#getBean");
+                "org.springframework.beans.factory.support.DefaultListableBeanFactory#getBean", null);
 
         ResponseEntity<String> response = rest.postForEntity(url("/api/scenarios"), duplicate, String.class);
 
