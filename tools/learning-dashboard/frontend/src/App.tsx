@@ -65,6 +65,7 @@ export default function App() {
   const [semanticEvents, setSemanticEvents] = useState<SemanticEvent[]>([]);
   const [selectedHit, setSelectedHit] = useState<TraceEvent | null>(null);
   const [running, setRunning] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleMessage = useCallback((message: ScenarioMessage) => {
     setLog((prev) => [...prev, message]);
@@ -73,6 +74,11 @@ export default function App() {
     } else if (message.type === "semantic") {
       setSemanticEvents((prev) => [...prev, message.event]);
     } else if (message.type === "exited") {
+      setRunning(false);
+    } else if (message.type === "error") {
+      // 예전에는 세션 시작이 실패해도(예: classpath 해석 실패) 서버 로그에만 남고 화면은
+      // HIT 0에서 그냥 멈춰 있었다(직접 겪은 문제) - 이제 배너로 즉시 알린다.
+      setErrorMessage(message.message);
       setRunning(false);
     }
   }, []);
@@ -89,6 +95,7 @@ export default function App() {
     setSemanticEvents([]);
     setSelectedHit(null);
     setRunning(false);
+    setErrorMessage(null);
     // snapshot 시나리오(condition-report)는 ScenarioCatalog에 등록돼 있지 않다 -
     // ScenarioSession의 재생 모델을 타지 않으므로 start()를 부를 대상이 없다.
     const meta = SCENARIOS.find((scenario) => scenario.key === key);
@@ -136,6 +143,15 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {errorMessage && (
+            <div className="error-banner" role="alert">
+              <span className="error-banner-text">{errorMessage}</span>
+              <button type="button" onClick={() => setErrorMessage(null)} aria-label="에러 배너 닫기">
+                ✕
+              </button>
+            </div>
+          )}
 
           {!isSnapshot && (
             <TransportControls

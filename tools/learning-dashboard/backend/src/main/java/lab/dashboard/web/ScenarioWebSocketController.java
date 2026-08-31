@@ -10,6 +10,7 @@ import lab.dashboard.session.SemanticEventReceived;
 
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
+import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
@@ -51,6 +52,21 @@ public class ScenarioWebSocketController {
     @MessageMapping("/scenario/http-request")
     public void httpRequest(ScenarioHttpRequestCommand request) {
         session.sendHttpRequest(request.method(), request.path(), request.body());
+    }
+
+    /**
+     * 이 컨트롤러의 @MessageMapping 메서드(주로 start() - classpath 해석이 실패하면
+     * ScenarioCatalog#resolve()가 IllegalStateException을 던진다) 밖으로 새어 나오는 예외를
+     * 전부 여기서 잡는다. 예전에는 서버 로그에만 "Unhandled exception from message handler
+     * method"로 남고 브라우저에는 아무 신호도 가지 않아서, 세션이 왜 시작되지 않는지 알 방법이
+     * HIT 0에서 하염없이 기다리는 것뿐이었다(직접 겪은 문제) - unknown scenario 브랜치가 이미
+     * 쓰던 것과 같은 {"type":"error"} 모양으로 통일해서 프론트가 한 곳에서만 에러를 처리하면
+     * 되게 했다.
+     */
+    @MessageExceptionHandler
+    public void handleException(Exception ex) {
+        String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+        messagingTemplate.convertAndSend("/topic/scenario", Map.of("type", "error", "message", message));
     }
 
     @EventListener
