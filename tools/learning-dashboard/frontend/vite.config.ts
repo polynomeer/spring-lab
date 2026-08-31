@@ -18,6 +18,11 @@ export default defineConfig({
         target: `ws://localhost:${backendPort}`,
         ws: true,
       },
+      // 저장된 시나리오 CRUD(docs/plan/04-dynamic-scenario-design.md) - 평범한 REST라 /ws와
+      // 달리 ws: true는 필요 없다.
+      "/api": {
+        target: `http://localhost:${backendPort}`,
+      },
     },
   },
   test: {

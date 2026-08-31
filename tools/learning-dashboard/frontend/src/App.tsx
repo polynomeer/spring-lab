@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { fetchScenarios } from "./api/scenarioApi";
 import { ConditionReportPanel } from "./components/ConditionReportPanel";
 import { HitInspector } from "./components/HitInspector";
+import { NewScenarioForm } from "./components/NewScenarioForm";
 import { RawEventLog } from "./components/RawEventLog";
 import { ScenarioTabs } from "./components/ScenarioTabs";
 import { ScenarioVisualization } from "./components/ScenarioVisualization";
@@ -11,67 +13,53 @@ import { TransportControls } from "./components/TransportControls";
 import { useResizableHeight } from "./hooks/useResizableHeight";
 import { useResizableRail } from "./hooks/useResizableRail";
 import { useDashboardSocket } from "./stomp/useDashboardSocket";
-import type { ScenarioMessage, ScenarioMeta, SemanticEvent, TraceEvent } from "./types";
+import type { SavedScenario, ScenarioMessage, ScenarioMeta, SemanticEvent, TraceEvent } from "./types";
 
-// lab.dashboard.session.ScenarioCatalog(백엔드)에 실제 등록된 이름과 정확히 일치해야 한다.
-const SCENARIOS: ScenarioMeta[] = [
-  {
-    key: "bean-lifecycle",
-    title: "빈 생명주기 + 순환 참조",
-    description: "3단계 캐시가 조기 참조를 노출하는 시점과, AOP 프록시 대상 빈의 순환 참조가 실제로 풀리는 과정.",
-    live: true,
-  },
-  {
-    key: "aop-proxy",
-    title: "AOP 자동 프록시 생성",
-    description: "advisor 빈이 재귀적으로 인스턴스화되는 순간과 JDK/CGLIB 프록시 선택 경로.",
-    live: true,
-  },
-  {
-    key: "tx-propagation",
-    title: "트랜잭션 전파",
-    description: "REQUIRES_NEW의 suspend/resume, 그리고 참여자 실패가 커밋 시점의 UnexpectedRollbackException으로 이어지는 경로.",
-    live: true,
-  },
-  {
-    key: "dispatcher-flow",
-    title: "DispatcherServlet 요청 흐름",
-    description: "임베디드 Tomcat에 실제 HTTP 요청을 쏴서, doDispatch → HandlerMapping → Interceptor → Controller(→ 예외 시 ExceptionResolver) 순서로 파이프라인이 채워지는 걸 지켜본다.",
-    live: true,
-  },
-  {
-    key: "event-multicast",
-    title: "애플리케이션 이벤트 멀티캐스트",
-    description: "동기 순서 리스너, condition 리스너, @Async 리스너(진짜 다른 스레드), 그리고 @TransactionalEventListener가 커밋 후에만 실행되는 것과 리스너 예외가 이후 리스너를 전부 막는 것까지.",
-    live: true,
-  },
-  {
-    key: "mvc-exception-priority",
-    title: "MVC 예외 처리 우선순위",
-    description: "컨트롤러 로컬 @ExceptionHandler가 @ControllerAdvice보다 항상 먼저 이기는 것, 두 advice가 겹치면 @Order가 정하는 것, 그리고 세 리졸버(ExceptionHandler → ResponseStatus → Default)가 어디서 멈추는지.",
-    live: true,
-  },
-  {
-    key: "condition-report",
-    title: "Boot 자동 설정 조건 평가 리포트",
-    description: "ConditionEvaluationReport는 refresh()가 끝나는 순간 이미 완성돼 있어 '단계'가 없다 - 그래서 재생 대신 프로퍼티를 바꿔 다시 실행하고, 어느 자동 설정이 왜 매치/불일치했는지 트리로 본다.",
-    live: true,
-    interactionMode: "snapshot",
-  },
-];
+// condition-report는 ScenarioCatalog(DB)에 등록돼 있지 않다 - ScenarioSession의 재생
+// 모델을 아예 타지 않는 유일한 시나리오라서(docs/plan/03-learning-dashboard-design.md
+// 6.5절) 여전히 프론트엔드에 정적으로 남아 있다.
+const CONDITION_REPORT_META: ScenarioMeta = {
+  key: "condition-report",
+  title: "Boot 자동 설정 조건 평가 리포트",
+  description:
+    "ConditionEvaluationReport는 refresh()가 끝나는 순간 이미 완성돼 있어 '단계'가 없다 - 그래서 재생 대신 프로퍼티를 바꿔 다시 실행하고, 어느 자동 설정이 왜 매치/불일치했는지 트리로 본다.",
+  live: true,
+  interactionMode: "snapshot",
+};
+
+// 실제 시나리오가 아니라 "+ 새 시나리오" 탭 자신 - NewScenarioForm을 보여준다
+// (docs/plan/04-dynamic-scenario-design.md).
+const NEW_SCENARIO_META: ScenarioMeta = {
+  key: "__new__",
+  title: "+ 새 시나리오",
+  description: "이미 있는 실험 모듈을 골라 새 시나리오를 등록합니다.",
+  live: true,
+  interactionMode: "create",
+};
+
+function toMeta(saved: SavedScenario): ScenarioMeta {
+  return { key: saved.name, title: saved.title, description: saved.description, live: true };
+}
+
+function isPlayable(mode: ScenarioMeta["interactionMode"] | undefined): boolean {
+  return mode !== "snapshot" && mode !== "create";
+}
 
 const SCENARIO_STORAGE_KEY = "trace-dash.active-scenario";
 
 function readStoredScenario(): string {
   try {
-    const raw = localStorage.getItem(SCENARIO_STORAGE_KEY);
-    return raw && SCENARIOS.some((scenario) => scenario.key === raw) ? raw : SCENARIOS[0].key;
+    return localStorage.getItem(SCENARIO_STORAGE_KEY) ?? "";
   } catch {
-    return SCENARIOS[0].key;
+    return "";
   }
 }
 
 export default function App() {
+  // DB에서 불러오기 전까지는 정적 항목 두 개(condition-report, + 새 시나리오)만 보인다 -
+  // 탭 자체는 항상 뭔가 보여줄 수 있어야 하므로 빈 배열로 시작하지 않는다.
+  const [scenarios, setScenarios] = useState<ScenarioMeta[]>([CONDITION_REPORT_META, NEW_SCENARIO_META]);
+  const [scenariosLoaded, setScenariosLoaded] = useState(false);
   const [activeScenario, setActiveScenario] = useState(readStoredScenario);
   const [log, setLog] = useState<ScenarioMessage[]>([]);
   const [semanticEvents, setSemanticEvents] = useState<SemanticEvent[]>([]);
@@ -80,7 +68,43 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hoveredHitIds, setHoveredHitIds] = useState<Set<number> | null>(null);
 
+  // Promise를 그대로 반환한다 - 새 시나리오를 만든 직후(onCreated)에는 목록이 실제로
+  // 갱신된 "다음"에 selectScenario를 불러야 한다. 순서를 안 지키면, 방금 저장된 시나리오가
+  // 아직 scenarios 배열에 없는 찰나에 "존재하지 않는 activeScenario는 첫 항목으로 되돌린다"는
+  // 아래 correction effect가 먼저 끼어들어 방금 만든 탭이 아니라 첫 번째 탭으로 되돌아가
+  // 버린다(직접 겪은 경쟁 상태).
+  const loadScenarios = useCallback(() => {
+    return fetchScenarios()
+      .then((saved) => {
+        setScenarios([...saved.map(toMeta), CONDITION_REPORT_META, NEW_SCENARIO_META]);
+      })
+      .catch((e: unknown) => setErrorMessage(e instanceof Error ? e.message : String(e)))
+      .finally(() => setScenariosLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    loadScenarios();
+  }, [loadScenarios]);
+
+  // localStorage에 저장돼 있던 시나리오가 그사이 삭제됐거나(또는 첫 방문이라 아직 아무것도
+  // 저장돼 있지 않으면) 목록이 채워지는 대로 첫 번째 시나리오로 되돌린다.
+  useEffect(() => {
+    if (!scenariosLoaded) {
+      return;
+    }
+    if (!scenarios.some((scenario) => scenario.key === activeScenario)) {
+      setActiveScenario(scenarios[0]?.key ?? CONDITION_REPORT_META.key);
+    }
+  }, [scenariosLoaded, scenarios, activeScenario]);
+
   const handleMessage = useCallback((message: ScenarioMessage) => {
+    // "+ 새 시나리오" 탭처럼 재생 대상이 없는 탭으로 옮겨 가도 백엔드의 이전 세션이
+    // 계속 돌고 있을 수 있다(ScenarioSession은 새 start() 호출 전까지 스스로 멈추지
+    // 않는다) - 지금 보고 있는 시나리오의 이벤트가 아니면 화면에 반영하지 않는다.
+    // error는 scenario 필드가 없는 전역 신호라 항상 통과시킨다.
+    if ("scenario" in message && message.scenario !== activeScenario) {
+      return;
+    }
     setLog((prev) => [...prev, message]);
     if (message.type === "hit") {
       setSelectedHit(message.event);
@@ -94,24 +118,28 @@ export default function App() {
       setErrorMessage(message.message);
       setRunning(false);
     }
-  }, []);
+  }, [activeScenario]);
 
   const { connected, startScenario, sendCommand, sendHttpRequest } = useDashboardSocket(handleMessage);
 
   // 새로고침 후 마지막으로 보던 시나리오가 activeScenario 초기값으로 복원되지만, 실제 라이브
   // 세션은 별도로 시작해 줘야 한다(탭을 다시 클릭하지 않아도 되게) - STOMP 연결이 처음
-  // 붙는 순간 딱 한 번만 실행한다(재연결마다 세션을 다시 시작해 버리면 안 되므로 ref로 막는다).
+  // 붙는 순간, 그리고 시나리오 목록이 로드된 뒤 딱 한 번만 실행한다(재연결마다 세션을 다시
+  // 시작해 버리면 안 되므로 ref로 막는다).
   const hasAutoStartedRef = useRef(false);
   useEffect(() => {
-    if (!connected || hasAutoStartedRef.current) {
+    if (!connected || !scenariosLoaded || hasAutoStartedRef.current) {
       return;
     }
+    const meta = scenarios.find((scenario) => scenario.key === activeScenario);
+    if (!meta) {
+      return; // activeScenario가 아직 유효한 값으로 정리되기 전 - 위 effect가 곧 고쳐 준다.
+    }
     hasAutoStartedRef.current = true;
-    const meta = SCENARIOS.find((scenario) => scenario.key === activeScenario);
-    if (meta?.interactionMode !== "snapshot") {
+    if (isPlayable(meta.interactionMode)) {
       startScenario(activeScenario);
     }
-  }, [connected, activeScenario, startScenario]);
+  }, [connected, scenariosLoaded, activeScenario, scenarios, startScenario]);
 
   const { width: railWidth, startDrag: startRailDrag, stageRef } = useResizableRail();
   const { height: semanticHeight, startDrag: startSemanticDrag } = useResizableHeight(
@@ -137,10 +165,10 @@ export default function App() {
     setRunning(false);
     setErrorMessage(null);
     setHoveredHitIds(null);
-    // snapshot 시나리오(condition-report)는 ScenarioCatalog에 등록돼 있지 않다 -
+    // snapshot/create 시나리오는 ScenarioCatalog를 통해 실행하는 대상이 아니다 -
     // ScenarioSession의 재생 모델을 타지 않으므로 start()를 부를 대상이 없다.
-    const meta = SCENARIOS.find((scenario) => scenario.key === key);
-    if (meta?.interactionMode !== "snapshot") {
+    const meta = scenarios.find((scenario) => scenario.key === key);
+    if (meta && isPlayable(meta.interactionMode)) {
       startScenario(key);
     }
   };
@@ -152,8 +180,10 @@ export default function App() {
     }
   };
 
-  const activeMeta = SCENARIOS.find((scenario) => scenario.key === activeScenario) ?? SCENARIOS[0];
+  const activeMeta = scenarios.find((scenario) => scenario.key === activeScenario) ?? scenarios[0];
   const isSnapshot = activeMeta.interactionMode === "snapshot";
+  const isCreate = activeMeta.interactionMode === "create";
+  const isInteractive = !isSnapshot && !isCreate;
 
   return (
     <div className="app">
@@ -163,7 +193,7 @@ export default function App() {
           trace<span className="slash">/</span>dash
           <span className="sub">— jdi-tracer 라이브 실행 시각화</span>
         </div>
-        <ScenarioTabs scenarios={SCENARIOS} active={activeScenario} onSelect={selectScenario} />
+        <ScenarioTabs scenarios={scenarios} active={activeScenario} onSelect={selectScenario} />
       </div>
 
       <div
@@ -178,7 +208,7 @@ export default function App() {
               <h1>{activeMeta.title}</h1>
               <p>{activeMeta.description}</p>
             </div>
-            {!isSnapshot && (
+            {isInteractive && (
               <div className="hitcounter">
                 HIT <b>{hitCount}</b>
               </div>
@@ -194,7 +224,7 @@ export default function App() {
             </div>
           )}
 
-          {!isSnapshot && (
+          {isInteractive && (
             <TransportControls
               connected={connected && activeMeta.live}
               running={running}
@@ -212,7 +242,15 @@ export default function App() {
           )}
 
           <div className="viewport">
-            {isSnapshot ? (
+            {isCreate ? (
+              <div className="viz-frame">
+                <NewScenarioForm
+                  onCreated={(created) => {
+                    void loadScenarios().then(() => selectScenario(created.name));
+                  }}
+                />
+              </div>
+            ) : isSnapshot ? (
               <div className="viz-frame">
                 <ConditionReportPanel />
               </div>

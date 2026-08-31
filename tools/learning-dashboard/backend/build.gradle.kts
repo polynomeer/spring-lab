@@ -28,7 +28,15 @@ dependencies {
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.websocket)
 
+    // 동적 시나리오 카탈로그(docs/plan/04-dynamic-scenario-design.md) - 저장된 시나리오 정의를
+    // 담는 테이블 하나뿐인 단순한 용도라 파일 모드 H2로 충분하다(별도 DB 서버 불필요).
+    implementation(libs.spring.boot.starter.data.jpa)
+    runtimeOnly(libs.h2)
+
     // @SpringBootTest + STOMP 클라이언트(WebSocketStompClient는 spring-websocket 본체에
     // 있으므로 별도 의존성 없이 이미 사용 가능하다)로 WebSocket 배선을 실제로 검증한다.
     testImplementation(libs.spring.boot.test)
+    // @DataJpaTest(ScenarioRepository 슬라이스 테스트)에 필요 - spring-boot-test 본체가 아니라
+    // autoconfigure 모듈에 있다.
+    testImplementation(libs.spring.boot.test.autoconfigure)
 }

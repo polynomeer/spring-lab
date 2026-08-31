@@ -1,20 +1,34 @@
 package lab.dashboard.session;
 
-import org.junit.jupiter.api.Test;
-
 import java.nio.file.Path;
+
+import lab.dashboard.scenario.ScenarioRepository;
+import lab.dashboard.scenario.ScenarioSeedData;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+// @DataJpaTest(리포지토리 슬라이스) - 실제 H2 인메모리 DB 위에서 ScenarioRepository를
+// 진짜로 굴려서 확인한다. resolve()(gradlew 셸아웃)는 여전히 여기서 부르지 않는다 -
+// scenarioNames()는 ClasspathResolver를 전혀 쓰지 않으므로 이 테스트만으로 충분하다.
+@DataJpaTest
 class ScenarioCatalogTest {
 
-    // scenarioNames()는 spec 파일을 열지 않으므로 repoRoot 값 자체는 이 테스트에서 중요하지
-    // 않다 - resolve()(gradlew 셸아웃)를 부르지 않는 한 ClasspathResolver도 실제로 쓰이지 않는다.
-    private final ScenarioCatalog catalog = new ScenarioCatalog(Path.of("."), new ClasspathResolver());
+    @Autowired
+    private ScenarioRepository repository;
 
     @Test
-    void listsAllSixScenariosIncludingTheNowLiveMvcExceptionPriority() {
+    void listsAllSixSeededScenariosInRegistrationOrder() {
+        Path repoRoot = ScenarioSeedData.findRepoRoot(Path.of(System.getProperty("user.dir")));
+        repository.saveAll(ScenarioSeedData.defaults(repoRoot));
+
+        ScenarioCatalog catalog = new ScenarioCatalog(repository, new ClasspathResolver());
+
         assertThat(catalog.scenarioNames()).containsExactly(
-                "bean-lifecycle", "aop-proxy", "tx-propagation", "dispatcher-flow", "event-multicast", "mvc-exception-priority");
+                "bean-lifecycle", "aop-proxy", "tx-propagation", "dispatcher-flow", "event-multicast",
+                "mvc-exception-priority");
     }
 }

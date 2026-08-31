@@ -52,6 +52,29 @@ class ScenarioSessionTest {
         assertThat(exited.scenarioName()).isEqualTo("fixture");
     }
 
+    // docs/plan/04-dynamic-scenario-design.md 3번 절 - breakpointSpec이 이제 spec 파일 경로가
+    // 아니라 인라인 텍스트다(여러 줄일 수 있음). 주석/빈 줄이 섞인 여러 줄짜리 스펙을 넣어도
+    // 위 단일 줄 테스트와 똑같이 히트 2개(SampleTarget#greet 2회 호출)가 나와야 한다 - 각
+    // 줄이 별도 인자로 풀려서 TracerServer에 전달된다는 것과, 빈 줄은 걸러진다는 것을 함께
+    // 확인한다.
+    @Test
+    void splitsAMultiLineInlineBreakpointSpecIntoSeparateArgumentsJustLikeTheSpecFilesUsedTo() throws Exception {
+        ScenarioDefinition definition = new ScenarioDefinition(
+                "fixture-multiline",
+                System.getProperty("java.class.path"),
+                "lab.tools.jdi.fixtures.SampleTarget",
+                "# a comment line, ignored by JdiSupport\n\nlab.tools.jdi.fixtures.SampleTarget#greet",
+                () -> hit -> List.of(SemanticEvent.of("FIXTURE_HIT", hit.hitId())));
+
+        session.start(definition);
+        awaitEventOfType(RawHitReceived.class, Duration.ofSeconds(15));
+
+        session.sendCommand("play", 50L);
+        awaitEventOfType(ScenarioExited.class, Duration.ofSeconds(15));
+
+        assertThat(events.stream().filter(RawHitReceived.class::isInstance)).hasSize(2);
+    }
+
     private void awaitEventOfType(Class<?> type, Duration timeout) throws InterruptedException {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {

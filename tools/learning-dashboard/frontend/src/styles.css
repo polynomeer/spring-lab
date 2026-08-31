@@ -877,6 +877,101 @@ select {
   color: var(--text-faint);
 }
 
+/* "+ 새 시나리오" 폼(NewScenarioForm) - docs/plan/04-dynamic-scenario-design.md 1단계. */
+.new-scenario-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 640px;
+}
+.new-scenario-intro {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0;
+}
+.new-scenario-intro code {
+  font-family: var(--mono);
+  color: var(--amber);
+}
+.new-scenario-error {
+  border: 1px solid var(--rose);
+  background: rgba(224, 116, 138, 0.12);
+  color: var(--rose);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+.new-scenario-hint {
+  color: var(--text-faint);
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.field input,
+.field textarea {
+  background: var(--ink-950);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.field input:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--amber-dim);
+}
+.field textarea.mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  resize: vertical;
+}
+.module-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--ink-950);
+}
+.module-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.new-scenario-form > button.primary {
+  align-self: flex-start;
+  border: 1px solid var(--amber-dim);
+  background: var(--amber-dim);
+  color: var(--ink-950);
+  border-radius: 6px;
+  padding: 9px 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.new-scenario-form > button.primary:hover:not(:disabled) {
+  background: var(--amber);
+}
+.new-scenario-form > button.primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition-duration: 0.001ms !important;

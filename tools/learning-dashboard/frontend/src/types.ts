@@ -49,7 +49,31 @@ export interface ScenarioMeta {
   live: boolean;
   // "stepped"(기본값 취급) - jdi-tracer로 한 걸음씩 재생하는 나머지 시나리오들.
   // "snapshot" - condition-report처럼 재생 개념이 없는, "다시 실행해서 결과 하나를 받는" 시나리오.
-  interactionMode?: "stepped" | "snapshot";
+  // "create" - 실제 시나리오가 아니라 "+ 새 시나리오" 탭 자신 - NewScenarioForm을 보여준다.
+  interactionMode?: "stepped" | "snapshot" | "create";
+}
+
+// lab.dashboard.web.ScenarioResponse(백엔드)와 1:1 대응 - DB에 저장된 시나리오 정의 하나.
+// docs/plan/04-dynamic-scenario-design.md 3번 절.
+export interface SavedScenario {
+  id: number;
+  name: string;
+  title: string;
+  description: string;
+  gradleModulePaths: string[];
+  mainClass: string;
+  breakpointSpec: string;
+  interpreterKind: string;
+  createdAt: string;
+}
+
+export interface ScenarioSaveRequest {
+  name: string;
+  title: string;
+  description: string;
+  gradleModulePaths: string[];
+  mainClass: string;
+  breakpointSpec: string;
 }
 
 // lab.dashboard.conditionreport.ConditionReportWebSocketController가 /topic/condition-report로

@@ -19,6 +19,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -61,10 +63,17 @@ public class ScenarioSession {
             // TracerServer 클래스와 그 Jackson 의존성이 이미 여기 다 들어 있다.
             String tracerClasspath = System.getProperty("java.class.path");
 
-            ProcessBuilder builder = new ProcessBuilder(
+            List<String> command = new ArrayList<>(List.of(
                     javaBin, "--add-modules", "jdk.jdi", "-cp", tracerClasspath,
                     "lab.tools.jdi.TracerServer",
-                    definition.targetClasspath(), definition.mainClass(), definition.breakpointSpec());
+                    definition.targetClasspath(), definition.mainClass()));
+            // definition.breakpointSpec()은 이제 (spec 파일 경로가 아니라) 여러 줄일 수 있는
+            // 인라인 텍스트다(docs/plan/04-dynamic-scenario-design.md 3번 절) - TracerServer는
+            // 가변 인자로 "각 줄이 하나의 스펙"을 받으므로, 한 줄이면 지금까지와 완전히 같은
+            // 인자 1개, 여러 줄이면 인자 여러 개로 풀어서 넘긴다.
+            command.addAll(definition.breakpointSpec().lines().filter(line -> !line.isBlank()).toList());
+
+            ProcessBuilder builder = new ProcessBuilder(command);
             builder.redirectErrorStream(false);
             Process process = builder.start();
 
