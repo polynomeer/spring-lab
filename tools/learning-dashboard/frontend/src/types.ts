@@ -79,6 +79,23 @@ export interface ScenarioSaveRequest {
   sourceCode?: string;
 }
 
+// lab.dashboard.web.ScenarioRunSummary/ScenarioRunDetail(백엔드)와 1:1 대응 - 완료된
+// 시나리오 실행 하나의 기록. docs/plan/04-dynamic-scenario-design.md 7번 절 "실행 히스토리
+// 스냅샷". ScenarioRunDetail.events는 ScenarioMessage와 정확히 같은 봉투 모양이라, 재생
+// 화면이 RawEventLog/SemanticEventLog를 그대로 재사용할 수 있다.
+export interface ScenarioRunSummary {
+  id: number;
+  scenarioName: string;
+  startedAt: string;
+  finishedAt: string;
+  totalHits: number | null;
+  timedOut: boolean;
+}
+
+export interface ScenarioRunDetail extends ScenarioRunSummary {
+  events: ScenarioMessage[];
+}
+
 // lab.dashboard.conditionreport.ConditionReportWebSocketController가 /topic/condition-report로
 // 보내는 봉투 모양 - ScenarioMessage 유니언과는 별개다(6.5절 설계 그대로, 데이터 모양이
 // 이질적이라 같은 토픽/유니언에 섞지 않는다).

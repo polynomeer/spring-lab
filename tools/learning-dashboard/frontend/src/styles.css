@@ -223,6 +223,11 @@ select {
   max-width: 62ch;
 }
 
+.hitcounter-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .hitcounter {
   font-family: var(--mono);
   font-size: 12px;
@@ -234,6 +239,21 @@ select {
   color: var(--amber);
   font-variant-numeric: tabular-nums;
   font-size: 17px;
+}
+.history-open {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.history-open:hover {
+  border-color: var(--amber-dim);
+  color: var(--text);
 }
 
 .error-banner {
@@ -1010,6 +1030,136 @@ select {
 .new-scenario-form > button.primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* 실행 히스토리 모달(RunHistoryModal) - docs/plan/04-dynamic-scenario-design.md 7번 절. */
+.history-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.history-modal {
+  width: min(920px, 92vw);
+  height: min(640px, 88vh);
+  background: var(--ink-900);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.history-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.history-modal-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.history-close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.history-close:hover {
+  background: var(--ink-800);
+  color: var(--text);
+}
+.history-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.history-run-list {
+  width: 260px;
+  flex: none;
+  border-right: 1px solid var(--line-soft);
+  overflow-y: auto;
+  padding: 10px;
+}
+.history-run-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.history-run-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.history-run-item {
+  flex: 1;
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--text-dim);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+.history-run-item:hover {
+  background: var(--ink-800);
+}
+.history-run-item[data-active="true"] {
+  background: var(--ink-800);
+  border-color: var(--amber-dim);
+  color: var(--text);
+}
+.history-run-time {
+  font-family: var(--mono);
+}
+.history-run-meta {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.history-run-delete {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 6px;
+  border-radius: 6px;
+}
+.history-run-delete:hover {
+  color: var(--rose);
+  background: rgba(224, 116, 138, 0.12);
+}
+.history-run-detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.history-detail-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (prefers-reduced-motion: reduce) {

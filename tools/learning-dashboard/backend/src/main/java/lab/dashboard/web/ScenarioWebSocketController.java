@@ -4,6 +4,7 @@ import lab.dashboard.session.RawHitReceived;
 import lab.dashboard.session.ScenarioCatalog;
 import lab.dashboard.session.ScenarioExited;
 import lab.dashboard.session.ScenarioHttpResponseReceived;
+import lab.dashboard.session.ScenarioMessageMapper;
 import lab.dashboard.session.ScenarioSession;
 import lab.dashboard.session.ScenarioStdoutReceived;
 import lab.dashboard.session.ScenarioTimedOut;
@@ -16,14 +17,14 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**
  * ScenarioSession(프로세스 관리 + Spring 이벤트 발행)과 브라우저 사이의 얇은 STOMP 전송
  * 계층. 이 컨트롤러 자신은 "무엇이 일어났는지"를 전혀 모른다 - {@link ScenarioSession}이
  * 발행한 Spring 애플리케이션 이벤트를 구독해서 그대로 {@code /topic/scenario}로
- * 중계할 뿐이다.
+ * 중계할 뿐이다. 이벤트를 JSON 봉투로 바꾸는 일 자체는 {@link ScenarioMessageMapper}에
+ * 맡긴다 - {@code ScenarioRunRecorder}(실행 히스토리 기록)도 같은 매핑을 쓴다.
  */
 @Controller
 public class ScenarioWebSocketController {
@@ -72,26 +73,22 @@ public class ScenarioWebSocketController {
 
     @EventListener
     public void onRawHit(RawHitReceived event) {
-        messagingTemplate.convertAndSend("/topic/scenario",
-                Map.of("type", "hit", "scenario", event.scenarioName(), "event", event.traceEvent()));
+        messagingTemplate.convertAndSend("/topic/scenario", ScenarioMessageMapper.forHit(event));
     }
 
     @EventListener
     public void onSemanticEvent(SemanticEventReceived event) {
-        messagingTemplate.convertAndSend("/topic/scenario",
-                Map.of("type", "semantic", "scenario", event.scenarioName(), "event", event.semanticEvent()));
+        messagingTemplate.convertAndSend("/topic/scenario", ScenarioMessageMapper.forSemantic(event));
     }
 
     @EventListener
     public void onStdout(ScenarioStdoutReceived event) {
-        messagingTemplate.convertAndSend("/topic/scenario",
-                Map.of("type", "stdout", "scenario", event.scenarioName(), "stream", event.stream(), "line", event.line()));
+        messagingTemplate.convertAndSend("/topic/scenario", ScenarioMessageMapper.forStdout(event));
     }
 
     @EventListener
     public void onExited(ScenarioExited event) {
-        messagingTemplate.convertAndSend("/topic/scenario",
-                Map.of("type", "exited", "scenario", event.scenarioName(), "totalHits", event.totalHits()));
+        messagingTemplate.convertAndSend("/topic/scenario", ScenarioMessageMapper.forExited(event));
     }
 
     /**
@@ -107,19 +104,6 @@ public class ScenarioWebSocketController {
 
     @EventListener
     public void onHttpResponse(ScenarioHttpResponseReceived event) {
-        // status/error가 서로 배타적이라(ScenarioHttpResponseReceived 참고) Map.of는 못 쓴다 -
-        // null 값을 넣을 수 없어서 HashMap으로 있는 필드만 채운다.
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("type", "httpResponse");
-        payload.put("scenario", event.scenarioName());
-        payload.put("method", event.method());
-        payload.put("path", event.path());
-        if (event.status() != null) {
-            payload.put("status", event.status());
-        }
-        if (event.error() != null) {
-            payload.put("error", event.error());
-        }
-        messagingTemplate.convertAndSend("/topic/scenario", payload);
+        messagingTemplate.convertAndSend("/topic/scenario", ScenarioMessageMapper.forHttpResponse(event));
     }
 }

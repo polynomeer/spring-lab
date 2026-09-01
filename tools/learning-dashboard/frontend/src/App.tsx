@@ -6,6 +6,7 @@ import { ConditionReportPanel } from "./components/ConditionReportPanel";
 import { HitInspector } from "./components/HitInspector";
 import { NewScenarioForm } from "./components/NewScenarioForm";
 import { RawEventLog } from "./components/RawEventLog";
+import { RunHistoryModal } from "./components/RunHistoryModal";
 import { ScenarioTabs } from "./components/ScenarioTabs";
 import { ScenarioVisualization } from "./components/ScenarioVisualization";
 import { SemanticEventLog } from "./components/SemanticEventLog";
@@ -67,6 +68,7 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hoveredHitIds, setHoveredHitIds] = useState<Set<number> | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Promise를 그대로 반환한다 - 새 시나리오를 만든 직후(onCreated)에는 목록이 실제로
   // 갱신된 "다음"에 selectScenario를 불러야 한다. 순서를 안 지키면, 방금 저장된 시나리오가
@@ -165,6 +167,7 @@ export default function App() {
     setRunning(false);
     setErrorMessage(null);
     setHoveredHitIds(null);
+    setShowHistory(false);
     // snapshot/create 시나리오는 ScenarioCatalog를 통해 실행하는 대상이 아니다 -
     // ScenarioSession의 재생 모델을 타지 않으므로 start()를 부를 대상이 없다.
     const meta = scenarios.find((scenario) => scenario.key === key);
@@ -209,8 +212,13 @@ export default function App() {
               <p>{activeMeta.description}</p>
             </div>
             {isInteractive && (
-              <div className="hitcounter">
-                HIT <b>{hitCount}</b>
+              <div className="hitcounter-group">
+                <button type="button" className="history-open" onClick={() => setShowHistory(true)}>
+                  실행 기록
+                </button>
+                <div className="hitcounter">
+                  HIT <b>{hitCount}</b>
+                </div>
               </div>
             )}
           </div>
@@ -313,6 +321,14 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {showHistory && (
+        <RunHistoryModal
+          scenarioName={activeScenario}
+          scenarioTitle={activeMeta.title}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
     </div>
   );
 }

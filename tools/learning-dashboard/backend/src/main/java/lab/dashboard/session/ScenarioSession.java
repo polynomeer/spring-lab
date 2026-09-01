@@ -76,6 +76,10 @@ public class ScenarioSession {
 
     public synchronized void start(ScenarioDefinition definition) {
         stop();
+        // ScenarioRunRecorder(실행 히스토리 기록)가 이 신호로 "이전 실행의 녹화 버퍼를
+        // 정리하고 새로 시작한다"는 걸 안다 - 아직 첫 히트가 오기도 전에, 프로세스를
+        // 띄우기 시작하는 시점에 미리 보낸다.
+        eventPublisher.publishEvent(new ScenarioStarted(definition.name()));
 
         try {
             String javaBin = System.getProperty("java.home") + "/bin/java";
