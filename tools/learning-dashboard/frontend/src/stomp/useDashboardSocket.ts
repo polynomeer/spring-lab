@@ -64,5 +64,22 @@ export function useDashboardSocket(onMessage: (message: ScenarioMessage) => void
     });
   }, []);
 
-  return { connected, startScenario, sendCommand, sendHttpRequest };
+  // docs/plan/04-dynamic-scenario-design.md 7번 절 "A/B 비교 실행" - 두 시나리오를 서로
+  // 건드리지 않고 동시에 띄운다. 일반 startScenario와 달리 시작하자마자 바로 재생되므로
+  // (ComparisonPanel에는 개별 Step/Play 컨트롤이 없다) 속도(intervalMs)를 함께 보낸다.
+  const startComparison = useCallback((nameA: string, nameB: string, intervalMs: number) => {
+    clientRef.current?.publish({
+      destination: "/app/scenario/comparison/start",
+      body: JSON.stringify({ nameA, nameB, intervalMs }),
+    });
+  }, []);
+
+  const stopComparison = useCallback((name: string) => {
+    clientRef.current?.publish({
+      destination: "/app/scenario/comparison/stop",
+      body: JSON.stringify({ name }),
+    });
+  }, []);
+
+  return { connected, startScenario, sendCommand, sendHttpRequest, startComparison, stopComparison };
 }

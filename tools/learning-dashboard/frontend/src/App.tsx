@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { fetchScenarios } from "./api/scenarioApi";
+import { ComparisonModal } from "./components/ComparisonModal";
 import { ConditionReportPanel } from "./components/ConditionReportPanel";
 import { HitInspector } from "./components/HitInspector";
 import { NewScenarioForm } from "./components/NewScenarioForm";
@@ -69,6 +70,7 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hoveredHitIds, setHoveredHitIds] = useState<Set<number> | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
 
   // Promise를 그대로 반환한다 - 새 시나리오를 만든 직후(onCreated)에는 목록이 실제로
   // 갱신된 "다음"에 selectScenario를 불러야 한다. 순서를 안 지키면, 방금 저장된 시나리오가
@@ -197,6 +199,9 @@ export default function App() {
           <span className="sub">— jdi-tracer 라이브 실행 시각화</span>
         </div>
         <ScenarioTabs scenarios={scenarios} active={activeScenario} onSelect={selectScenario} />
+        <button type="button" className="history-open" onClick={() => setShowComparison(true)}>
+          ⇄ A/B 비교
+        </button>
       </div>
 
       <div
@@ -329,6 +334,8 @@ export default function App() {
           onClose={() => setShowHistory(false)}
         />
       )}
+
+      {showComparison && <ComparisonModal onClose={() => setShowComparison(false)} />}
     </div>
   );
 }

@@ -2,6 +2,7 @@ package lab.dashboard.web;
 
 import lab.dashboard.session.RawHitReceived;
 import lab.dashboard.session.ScenarioCatalog;
+import lab.dashboard.session.ScenarioDefinition;
 import lab.dashboard.session.ScenarioExited;
 import lab.dashboard.session.ScenarioHttpResponseReceived;
 import lab.dashboard.session.ScenarioMessageMapper;
@@ -18,6 +19,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * ScenarioSession(프로세스 관리 + Spring 이벤트 발행)과 브라우저 사이의 얇은 STOMP 전송
@@ -44,6 +46,32 @@ public class ScenarioWebSocketController {
     public void start(@DestinationVariable String name) {
         catalog.resolve(name).ifPresentOrElse(session::start, () -> messagingTemplate.convertAndSend(
                 "/topic/scenario", Map.of("type", "error", "message", "unknown scenario: " + name)));
+    }
+
+    /**
+     * docs/plan/04-dynamic-scenario-design.md 7번 절 "A/B 비교 실행" - 서로 다른 두 시나리오를
+     * 상대를 건드리지 않고 동시에 띄운다. 일반 {@code start}와 달리 비교 화면에는 개별
+     * Step/Play 컨트롤이 없으므로, 시작하자마자 {@code intervalMs} 속도로 바로 재생을
+     * 걸어 둔다({@link ScenarioSession#startComparison}).
+     */
+    @MessageMapping("/scenario/comparison/start")
+    public void startComparison(ComparisonStartRequest request) {
+        resolveOrError(request.nameA()).ifPresent(a -> session.startComparison(a, request.intervalMs()));
+        resolveOrError(request.nameB()).ifPresent(b -> session.startComparison(b, request.intervalMs()));
+    }
+
+    @MessageMapping("/scenario/comparison/stop")
+    public void stopComparison(ComparisonStopRequest request) {
+        session.stop(request.name());
+    }
+
+    private Optional<ScenarioDefinition> resolveOrError(String name) {
+        Optional<ScenarioDefinition> definition = catalog.resolve(name);
+        if (definition.isEmpty()) {
+            messagingTemplate.convertAndSend(
+                    "/topic/scenario", Map.of("type", "error", "message", "unknown scenario: " + name));
+        }
+        return definition;
     }
 
     @MessageMapping("/scenario/command")

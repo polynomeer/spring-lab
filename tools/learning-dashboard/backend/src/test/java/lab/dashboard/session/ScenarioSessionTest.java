@@ -110,6 +110,79 @@ class ScenarioSessionTest {
         }
     }
 
+    // docs/plan/04-dynamic-scenario-design.md 7번 절 "A/B 비교 실행" - startComparison은
+    // start()와 달리 서로를 정리하지 않고 나란히 떠 있어야 한다는 것과, 시작하자마자 별도의
+    // play 명령 없이도 바로 재생이 진행된다는 것을 함께 확인한다.
+    @Test
+    void startComparisonRunsTwoNamedScenariosConcurrentlyWithoutStoppingEachOther() throws Exception {
+        ScenarioDefinition a = new ScenarioDefinition(
+                "comparison-a", System.getProperty("java.class.path"),
+                "lab.tools.jdi.fixtures.SampleTarget", "lab.tools.jdi.fixtures.SampleTarget#greet",
+                () -> hit -> List.of(), false);
+        ScenarioDefinition b = new ScenarioDefinition(
+                "comparison-b", System.getProperty("java.class.path"),
+                "lab.tools.jdi.fixtures.SampleTarget", "lab.tools.jdi.fixtures.SampleTarget#greet",
+                () -> hit -> List.of(), false);
+
+        session.startComparison(a, 50L);
+        session.startComparison(b, 50L);
+
+        awaitCondition(Duration.ofSeconds(15), () -> events.stream()
+                .filter(ScenarioExited.class::isInstance).map(ScenarioExited.class::cast)
+                .map(ScenarioExited::scenarioName)
+                .collect(java.util.stream.Collectors.toSet())
+                .containsAll(List.of("comparison-a", "comparison-b")));
+
+        long hitsForA = events.stream().filter(RawHitReceived.class::isInstance)
+                .map(RawHitReceived.class::cast).filter(e -> e.scenarioName().equals("comparison-a")).count();
+        long hitsForB = events.stream().filter(RawHitReceived.class::isInstance)
+                .map(RawHitReceived.class::cast).filter(e -> e.scenarioName().equals("comparison-b")).count();
+        assertThat(hitsForA).isEqualTo(2);
+        assertThat(hitsForB).isEqualTo(2);
+    }
+
+    // docs/plan/04-dynamic-scenario-design.md 7번 절 "A/B 비교 실행" - 실제로 겪었던 회귀
+    // 버그를 그대로 재현해서 고정한다: 비교 화면에서 고른 시나리오 이름이 메인 화면에서
+    // 지금 재생 중인 시나리오 이름과 우연히 겹치면, startComparison이 메인 세션을 조용히
+    // 죽이고 자기 걸로 갈아치웠었다(처음에는 메인 세션과 비교 세션을 이름만으로 구분되는
+    // 같은 맵에 뒀기 때문).
+    //
+    // 두 세션이 같은 이름을 쓰므로 이벤트만으로는 "어느 쪽에서 왔는지" 구분할 수 없다 -
+    // 그래서 순서를 이용해 결정론적으로 검증한다: 메인 세션은 첫 히트에서 멈춰 둔 채(아직
+    // step/play를 보내지 않음) 비교 세션만 끝까지 돌려 자연 종료(ScenarioExited)시킨다.
+    // 그 시점에 비교 세션의 Running은 이미 스스로 정리됐으니, 그 뒤에 메인 세션에 step을
+    // 보내 새 히트가 나오는지만 보면 된다 - 버그가 있었다면 startComparison 시점에 메인
+    // 세션도 함께 죽었을 것이므로 이 step은 아무것도 못 깨우고 타임아웃난다.
+    @Test
+    void startingAComparisonWithTheSameNameAsTheMainSessionDoesNotStopTheMainSession() throws Exception {
+        ScenarioDefinition definition = new ScenarioDefinition(
+                "shared-name", System.getProperty("java.class.path"),
+                "lab.tools.jdi.fixtures.SampleTarget", "lab.tools.jdi.fixtures.SampleTarget#greet",
+                () -> hit -> List.of(), false);
+
+        session.start(definition);
+        awaitEventOfType(RawHitReceived.class, Duration.ofSeconds(15));
+
+        session.startComparison(definition, 50L);
+        awaitEventOfType(ScenarioExited.class, Duration.ofSeconds(15));
+
+        long hitsBeforeMainStep = events.stream().filter(RawHitReceived.class::isInstance).count();
+        session.sendCommand("step", null);
+        awaitCondition(Duration.ofSeconds(15), () -> events.stream()
+                .filter(RawHitReceived.class::isInstance).count() > hitsBeforeMainStep);
+    }
+
+    private void awaitCondition(Duration timeout, java.util.function.BooleanSupplier condition) throws InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (condition.getAsBoolean()) {
+                return;
+            }
+            Thread.sleep(50);
+        }
+        throw new AssertionError("timed out waiting for condition");
+    }
+
     private void awaitEventOfType(Class<?> type, Duration timeout) throws InterruptedException {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {

@@ -23,6 +23,8 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -32,8 +34,27 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * "지금 활성 시나리오는 최대 1개"(docs/plan/03-learning-dashboard-design.md 4번 절)를 그대로
- * 구현한다 - 이미 실행 중인 세션이 있으면 {@link #start}가 그걸 먼저 정리하고 새로 시작한다.
+ * 기본 흐름은 "지금 활성 시나리오는 최대 1개"(docs/plan/03-learning-dashboard-design.md 4번
+ * 절)를 그대로 구현한다 - 이미 실행 중인 세션이 있으면 {@link #start}가 그걸 먼저 정리하고
+ * 새로 시작한다.
+ *
+ * <p>docs/plan/04-dynamic-scenario-design.md 7번 절 "A/B 비교 실행"을 위해 {@link #startComparison}도
+ * 지원한다 - 이건 메인 흐름과 완전히 별개인 두 번째 세션 저장소({@link #comparisonRunning})를
+ * 쓴다. 처음엔 메인 세션과 같은 맵을 이름으로만 구분해서 같이 쓰도록 짰었는데, 비교 화면에서
+ * 고른 시나리오 이름이 메인 화면에서 지금 보고 있는 시나리오 이름과 우연히 겹치면(흔한
+ * 경우다 - 비교 화면의 기본 선택값이 목록 첫 항목이라, 메인 화면에서 이미 보고 있던 그
+ * 시나리오와 자주 겹친다) {@code startComparison}이 메인 세션을 조용히 죽이고 자기 걸로
+ * 갈아치우는 버그가 실제로 났다(직접 재현해서 확인했다 - 메인 화면의 HIT 카운트와 semantic
+ * 로그에 시작 지점부터 다시 센 이벤트가 섞여 들어왔다). 두 흐름을 물리적으로 다른 맵에
+ * 두면 이 문제가 근본적으로 사라진다 - {@link #start}/{@link #stop()}/{@link #sendCommand}/
+ * {@link #sendHttpRequest}는 오직 {@link #running}만, {@link #startComparison}/
+ * {@link #stop(String)}은 오직 {@link #comparisonRunning}만 건드린다.
+ *
+ * <p>다만 두 흐름이 같은 이름의 시나리오를 동시에 돌리는 경우(메인 화면에서 보고 있는
+ * 시나리오를 비교의 한쪽으로도 고른 경우)까지 완전히 분리하지는 못한다 - 웹소켓이 내보내는
+ * 이벤트 봉투는 시나리오 이름만 담고 어느 세션(메인/비교 A/비교 B)에서 왔는지는 담지
+ * 않으므로, 그 경우 메인 화면의 로그에 두 프로세스의 이벤트가 섞여 보일 수 있다. 흔치 않은
+ * 자기 자신과의 우연한 이름 중복이라 프론트엔드에서 막지 않고 알려진 제약으로 남겨 둔다.
  *
  * <p>이 클래스는 TracerServer를 자식 프로세스로 launch하고, 그 NDJSON stdout을 파싱해서
  * 원본 히트는 {@link RawHitReceived}로, 그 히트로부터 시나리오별 해석기가 파생시킨 것은
@@ -61,7 +82,8 @@ public class ScenarioSession {
                 thread.setDaemon(true);
                 return thread;
             });
-    private final AtomicReference<Running> running = new AtomicReference<>();
+    private final Map<String, Running> running = new ConcurrentHashMap<>();
+    private final Map<String, Running> comparisonRunning = new ConcurrentHashMap<>();
 
     @Autowired
     public ScenarioSession(ApplicationEventPublisher eventPublisher) {
@@ -75,7 +97,23 @@ public class ScenarioSession {
     }
 
     public synchronized void start(ScenarioDefinition definition) {
-        stop();
+        stopAll(running);
+        launch(definition, running);
+    }
+
+    /**
+     * docs/plan/04-dynamic-scenario-design.md 7번 절 "A/B 비교 실행" - {@link #running}(메인
+     * 흐름)은 전혀 건드리지 않고 {@link #comparisonRunning}에만 띄운다. 비교 화면에는
+     * Step/Play 같은 개별 트랜스포트 컨트롤이 없다 - 시작하자마자 지정된 속도로 바로
+     * 재생을 시작해서 "두 개를 나란히 지켜보는" 용도에 맞춘다.
+     */
+    public synchronized void startComparison(ScenarioDefinition definition, long autoPlayIntervalMs) {
+        stopOne(definition.name(), comparisonRunning);
+        Running current = launch(definition, comparisonRunning);
+        sendCommandTo(current, TracerCommand.PLAY, autoPlayIntervalMs);
+    }
+
+    private Running launch(ScenarioDefinition definition, Map<String, Running> store) {
         // ScenarioRunRecorder(실행 히스토리 기록)가 이 신호로 "이전 실행의 녹화 버퍼를
         // 정리하고 새로 시작한다"는 걸 안다 - 아직 첫 히트가 오기도 전에, 프로세스를
         // 띄우기 시작하는 시점에 미리 보낸다.
@@ -105,7 +143,7 @@ public class ScenarioSession {
             PrintWriter stdin = new PrintWriter(process.getOutputStream(), true);
             Running current = new Running(process, stdin, definition.name(), new AtomicReference<>(),
                     new AtomicReference<>());
-            running.set(current);
+            store.put(definition.name(), current);
 
             // 즉석 코드 작성 시나리오(docs/plan/04-dynamic-scenario-design.md 5번 절)만
             // 대상이다 - 기존 6개 카탈로그 시나리오는 이미 검증된 코드이고, dispatcher-flow처럼
@@ -113,35 +151,33 @@ public class ScenarioSession {
             // 걸면 안 된다.
             if (definition.dynamicallyCompiled()) {
                 ScheduledFuture<?> timeoutFuture = timeoutScheduler.schedule(
-                        () -> onTimeout(current), dynamicScenarioTimeout.toSeconds(), TimeUnit.SECONDS);
+                        () -> onTimeout(current, store), dynamicScenarioTimeout.toSeconds(), TimeUnit.SECONDS);
                 current.timeoutFuture().set(timeoutFuture);
             }
 
             ScenarioInterpreter interpreter = definition.interpreterFactory().get();
-            Thread reader = new Thread(() -> pump(current, interpreter));
+            Thread reader = new Thread(() -> pump(current, interpreter, store));
             reader.setDaemon(true);
             reader.start();
+            return current;
         } catch (IOException e) {
             throw new IllegalStateException("failed to launch scenario " + definition.name(), e);
         }
     }
 
-    private synchronized void onTimeout(Running target) {
+    private synchronized void onTimeout(Running target, Map<String, Running> store) {
         // 이 타이머가 도는 사이 세션이 이미 자연 종료됐거나 다른 시나리오로 교체됐을 수
         // 있다 - identity로 정확히 지금 이 타이머가 지키던 세션이 맞는지 확인한 뒤에만 죽인다.
-        if (running.get() != target) {
+        if (store.get(target.scenarioName()) != target) {
             return;
         }
         eventPublisher.publishEvent(new ScenarioTimedOut(target.scenarioName(), dynamicScenarioTimeout.toSeconds()));
-        stop();
+        stopOne(target.scenarioName(), store);
     }
 
+    /** 메인 단일 세션 흐름 전용 - 지금 딱 하나 떠 있는 세션(있다면)을 대상으로 한다. */
     public synchronized void sendCommand(String cmd, Long intervalMs) {
-        Running current = running.get();
-        if (current == null) {
-            return;
-        }
-        sendCommandTo(current, cmd, intervalMs);
+        running.values().stream().findFirst().ifPresent(current -> sendCommandTo(current, cmd, intervalMs));
     }
 
     /**
@@ -151,7 +187,7 @@ public class ScenarioSession {
      * 지나가면서 찍는 JDI 히트들이다(step/play로 계속 관찰 중인 그 세션).
      */
     public void sendHttpRequest(String method, String path, String body) {
-        Running current = running.get();
+        Running current = running.values().stream().findFirst().orElse(null);
         if (current == null) {
             return;
         }
@@ -183,14 +219,29 @@ public class ScenarioSession {
                 });
     }
 
+    /** 메인 단일 세션 흐름과 비교 세션들을 전부 정리한다 - 테스트 teardown 등 완전 초기화용. */
     public synchronized void stop() {
-        Running current = running.getAndSet(null);
+        stopAll(running);
+        stopAll(comparisonRunning);
+    }
+
+    /** A/B 비교 세션 하나만 이름으로 정리한다({@link #comparisonRunning}만 대상 - 메인 세션은 건드리지 않는다). */
+    public synchronized void stop(String scenarioName) {
+        stopOne(scenarioName, comparisonRunning);
+    }
+
+    private void stopAll(Map<String, Running> store) {
+        List.copyOf(store.keySet()).forEach(name -> stopOne(name, store));
+    }
+
+    private void stopOne(String scenarioName, Map<String, Running> store) {
+        Running current = store.remove(scenarioName);
         if (current == null) {
             return;
         }
         ScheduledFuture<?> timeoutFuture = current.timeoutFuture().get();
         if (timeoutFuture != null) {
-            // 세션이 자연 종료되거나 새 세션으로 교체될 때도 stop()을 거치므로, 여기서
+            // 세션이 자연 종료되거나 새 세션으로 교체될 때도 이 경로를 거치므로, 여기서
             // 취소해 두지 않으면 이미 끝난 세션에 대한 타이머가 나중에 헛되이 또 발화한다
             // (onTimeout()의 identity 체크가 실제로 해를 끼치는 건 막아 주지만, 안 쓰는
             // 타이머를 계속 스케줄러에 남겨 두는 건 낭비다).
@@ -209,18 +260,18 @@ public class ScenarioSession {
         }
     }
 
-    private void pump(Running current, ScenarioInterpreter interpreter) {
+    private void pump(Running current, ScenarioInterpreter interpreter, Map<String, Running> store) {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(current.process().getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                handleLine(current, interpreter, line);
+                handleLine(current, interpreter, line, store);
             }
         } catch (IOException ignored) {
             // stop()이 프로세스를 강제 종료하면 스트림이 그냥 끊긴다 - 정상 종료 경로다.
         }
     }
 
-    private void handleLine(Running current, ScenarioInterpreter interpreter, String line) {
+    private void handleLine(Running current, ScenarioInterpreter interpreter, String line, Map<String, Running> store) {
         String scenarioName = current.scenarioName();
         JsonNode node;
         try {
@@ -259,7 +310,10 @@ public class ScenarioSession {
                     // 체크가 이미 안전하게 무시한다 - 스케줄러에 계속 남겨 둘 이유가 없다).
                     timeoutFuture.cancel(false);
                 }
-                running.set(null);
+                // 이미 다른 세션이 같은 이름으로 그 자리를 대체했을 수도 있으니(예: 같은
+                // 이름의 비교 세션을 재시작), 지금 이 pump 스레드가 맡고 있던 바로 그
+                // Running일 때만 지운다.
+                store.remove(scenarioName, current);
             }
             default -> { }
         }

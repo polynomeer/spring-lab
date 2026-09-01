@@ -1226,6 +1226,96 @@ select {
   padding: 8px;
 }
 
+/* ---------- A/B comparison (docs/plan/04-dynamic-scenario-design.md 7절) ---------- */
+
+.comparison-modal {
+  width: min(1200px, 96vw);
+}
+.comparison-setup {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-wrap: wrap;
+}
+.comparison-setup .field {
+  min-width: 160px;
+}
+.comparison-setup select {
+  background: var(--ink-900);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 12.5px;
+}
+.comparison-start,
+.comparison-stop {
+  appearance: none;
+  border: 1px solid var(--amber);
+  background: var(--amber);
+  color: #201306;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.comparison-start:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.comparison-stop {
+  background: transparent;
+  color: var(--rose);
+  border-color: var(--rose);
+}
+.comparison-stop:hover {
+  background: rgba(224, 116, 138, 0.12);
+}
+.comparison-panes {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line-soft);
+  min-height: 0;
+  overflow: hidden;
+}
+.comparison-pane {
+  background: var(--ink-900);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px 14px;
+  gap: 6px;
+}
+.comparison-pane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 13px;
+}
+.comparison-pane-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comparison-pane-hits {
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.comparison-pane .history-detail-panel {
+  flex: 1 1 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition-duration: 0.001ms !important;

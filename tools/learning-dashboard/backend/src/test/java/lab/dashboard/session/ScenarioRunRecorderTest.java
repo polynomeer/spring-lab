@@ -78,6 +78,30 @@ class ScenarioRunRecorderTest {
         assertThat(repository.findByScenarioNameOrderByStartedAtDesc("replacement")).hasSize(1);
     }
 
+    // docs/plan/04-dynamic-scenario-design.md 7번 절 "A/B 비교 실행" - 서로 다른 이름의 두
+    // 실행이 동시에 진행 중일 때(A의 ScenarioStarted 이후, A가 끝나기 전에 B가 시작), 둘 다
+    // 온전히 따로 기록돼야 한다 - Map으로 일반화하기 전에는 B의 ScenarioStarted가 A의 기록
+    // 버퍼를 조용히 밀어내 A의 히트/종료가 아예 기록되지 않는 버그가 있었다.
+    @Test
+    void recordsTwoConcurrentlyStartedScenariosIndependently() {
+        ScenarioRunRecorder recorder = new ScenarioRunRecorder(repository, mapper);
+
+        recorder.onStarted(new ScenarioStarted("comparison-a"));
+        recorder.onStarted(new ScenarioStarted("comparison-b"));
+        recorder.onRawHit(new RawHitReceived("comparison-a", sampleHit(1)));
+        recorder.onRawHit(new RawHitReceived("comparison-b", sampleHit(1)));
+        recorder.onExited(new ScenarioExited("comparison-b", 1));
+        recorder.onRawHit(new RawHitReceived("comparison-a", sampleHit(2)));
+        recorder.onExited(new ScenarioExited("comparison-a", 2));
+
+        List<ScenarioRunEntity> runsA = repository.findByScenarioNameOrderByStartedAtDesc("comparison-a");
+        List<ScenarioRunEntity> runsB = repository.findByScenarioNameOrderByStartedAtDesc("comparison-b");
+        assertThat(runsA).hasSize(1);
+        assertThat(runsB).hasSize(1);
+        assertThat(runsA.get(0).getTotalHits()).isEqualTo(2);
+        assertThat(runsB.get(0).getTotalHits()).isEqualTo(1);
+    }
+
     private TraceEvent sampleHit(int hitId) {
         return new TraceEvent(hitId, 0L, "main",
                 new TraceEvent.Location("lab.dynamic.Demo", "main", 10), List.of(), List.of(), true);
