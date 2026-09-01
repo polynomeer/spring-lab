@@ -29,5 +29,8 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // e2e/는 Playwright 전용이다(playwright.config.ts) - 파일 이름이 vitest 기본 include
+    // 패턴(*.spec.ts)과 겹치므로 명시적으로 빼 준다.
+    exclude: ["**/node_modules/**", "e2e/**"],
   },
 });

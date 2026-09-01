@@ -11,3 +11,5 @@ dist/
 *.tsbuildinfo
 tools/learning-dashboard/frontend/vite.config.js
 tools/learning-dashboard/frontend/vite.config.d.ts
+tools/learning-dashboard/frontend/playwright-report/
+tools/learning-dashboard/frontend/test-results/
