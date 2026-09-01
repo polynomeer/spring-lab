@@ -29,3 +29,17 @@ export function deleteRun(id: number): Promise<void> {
     }
   });
 }
+
+// docs/plan/04-dynamic-scenario-design.md 7번 절 "시나리오 → 정식 문서 뼈대 export" -
+// lab.dashboard.web.ScenarioController#export(백엔드)를 감싼다. JSON이 아니라 순수
+// 마크다운 텍스트를 돌려주므로 handleJson을 쓰지 않는다.
+export function exportScenarioDoc(scenarioName: string, runId: number): Promise<string> {
+  const url = `/api/scenarios/export?name=${encodeURIComponent(scenarioName)}&runId=${runId}`;
+  return fetch(url).then(async (response) => {
+    if (!response.ok) {
+      const message = await response.text().catch(() => response.statusText);
+      throw new Error(message || `내보내기가 실패했습니다 (${response.status})`);
+    }
+    return response.text();
+  });
+}

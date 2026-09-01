@@ -10,10 +10,14 @@ import lab.dashboard.session.ClasspathResolver;
 import lab.dashboard.scenario.DynamicScenarioCompiler;
 import lab.dashboard.scenario.InterpreterKind;
 import lab.dashboard.scenario.ScenarioDefinitionEntity;
+import lab.dashboard.scenario.ScenarioDocExporter;
 import lab.dashboard.scenario.ScenarioModuleLookup;
 import lab.dashboard.scenario.ScenarioRepository;
+import lab.dashboard.scenario.ScenarioRunEntity;
+import lab.dashboard.scenario.ScenarioRunRepository;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,13 +51,18 @@ public class ScenarioController {
     private final ScenarioModuleLookup moduleLookup;
     private final ClasspathResolver classpathResolver;
     private final DynamicScenarioCompiler compiler;
+    private final ScenarioRunRepository runRepository;
+    private final ScenarioDocExporter docExporter;
 
     public ScenarioController(ScenarioRepository repository, ScenarioModuleLookup moduleLookup,
-                               ClasspathResolver classpathResolver, DynamicScenarioCompiler compiler) {
+                               ClasspathResolver classpathResolver, DynamicScenarioCompiler compiler,
+                               ScenarioRunRepository runRepository, ScenarioDocExporter docExporter) {
         this.repository = repository;
         this.moduleLookup = moduleLookup;
         this.classpathResolver = classpathResolver;
         this.compiler = compiler;
+        this.runRepository = runRepository;
+        this.docExporter = docExporter;
     }
 
     @GetMapping
@@ -68,6 +78,21 @@ public class ScenarioController {
     @GetMapping("/compiler-status")
     public Map<String, Boolean> compilerStatus() {
         return Map.of("available", compiler.isAvailable());
+    }
+
+    /**
+     * docs/plan/04-dynamic-scenario-design.md 7번 절 "시나리오 → 정식 문서 뼈대 export".
+     * {@code runId}를 안 주면 이 시나리오의 가장 최근 완료된 실행을 8절(런타임 관찰) 표의
+     * 근거로 쓴다 - 완료된 실행이 아예 없으면 8절은 TODO로 남는다.
+     */
+    @GetMapping(value = "/export", produces = MediaType.TEXT_MARKDOWN_VALUE)
+    public String export(@RequestParam String name, @RequestParam(required = false) Long runId) {
+        ScenarioDefinitionEntity scenario = repository.findByName(name)
+                .orElseThrow(() -> new NoSuchElementException("no scenario named " + name));
+        ScenarioRunEntity run = runId != null
+                ? runRepository.findById(runId).orElse(null)
+                : runRepository.findByScenarioNameOrderByStartedAtDesc(name).stream().findFirst().orElse(null);
+        return docExporter.export(scenario, run);
     }
 
     @PostMapping

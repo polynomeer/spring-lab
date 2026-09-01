@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { deleteRun, fetchRunDetail, fetchRunHistory } from "../api/runHistoryApi";
+import { deleteRun, exportScenarioDoc, fetchRunDetail, fetchRunHistory } from "../api/runHistoryApi";
 import type { ScenarioRunDetail, ScenarioRunSummary } from "../types";
 import { RawEventLog } from "./RawEventLog";
 import { SemanticEventLog } from "./SemanticEventLog";
@@ -30,6 +30,9 @@ export function RunHistoryModal({ scenarioName, scenarioTitle, onClose }: Props)
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<ScenarioRunDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [exportedDoc, setExportedDoc] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const loadRuns = () => {
     setLoading(true);
@@ -47,10 +50,38 @@ export function RunHistoryModal({ scenarioName, scenarioTitle, onClose }: Props)
   const selectRun = (id: number) => {
     setSelectedId(id);
     setDetailLoading(true);
+    setExportedDoc(null);
+    setExportError(null);
     fetchRunDetail(id)
       .then(setDetail)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setDetailLoading(false));
+  };
+
+  const exportDoc = async () => {
+    if (selectedId === null) {
+      return;
+    }
+    setExportError(null);
+    setCopied(false);
+    try {
+      const markdown = await exportScenarioDoc(scenarioName, selectedId);
+      setExportedDoc(markdown);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const copyExportedDoc = async () => {
+    if (!exportedDoc) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(exportedDoc);
+      setCopied(true);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   const removeRun = async (id: number) => {
@@ -126,6 +157,34 @@ export function RunHistoryModal({ scenarioName, scenarioTitle, onClose }: Props)
               <p className="new-scenario-hint">불러오는 중...</p>
             ) : detail ? (
               <>
+                <div className="history-export-bar">
+                  <button type="button" className="history-export-open" onClick={() => void exportDoc()}>
+                    이 실행으로 문서 뼈대 만들기
+                  </button>
+                  {exportError && (
+                    <span className="new-scenario-error" role="alert">
+                      {exportError}
+                    </span>
+                  )}
+                </div>
+                {exportedDoc && (
+                  <div className="history-export-panel">
+                    <div className="history-export-head">
+                      <span className="new-scenario-hint">
+                        docs/plan/00-methodology.md 12절 골격 - TODO로 표시된 절은 직접 채워 주세요.
+                      </span>
+                      <div className="history-export-actions">
+                        <button type="button" onClick={() => void copyExportedDoc()}>
+                          {copied ? "복사됨" : "복사"}
+                        </button>
+                        <button type="button" onClick={() => setExportedDoc(null)}>
+                          닫기
+                        </button>
+                      </div>
+                    </div>
+                    <textarea className="history-export-text" readOnly value={exportedDoc} />
+                  </div>
+                )}
                 <div className="rail-section-head">
                   semantic events <span className="count">{semanticEntries.length}</span>
                 </div>

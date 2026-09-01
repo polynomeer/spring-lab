@@ -85,6 +85,22 @@ class ScenarioControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
 
+    @Test
+    void exportsAMarkdownSkeletonWithTodoPlaceholdersWhenNoRunExists() {
+        String markdown = rest.getForObject(url("/api/scenarios/export?name=bean-lifecycle"), String.class);
+
+        assertThat(markdown).contains("## 1. 이번 질문", "## 8. 런타임 관찰", "## 12. 결론 (예상과 실제의 차이)");
+        assertThat(markdown).contains("<!-- TODO");
+        assertThat(markdown).contains("## 7. 브레이크포인트");
+    }
+
+    @Test
+    void exportingAnUnknownScenarioNameIsNotFound() {
+        ResponseEntity<String> response = rest.getForEntity(url("/api/scenarios/export?name=no-such-scenario"), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
     private String url(String path) {
         return "http://localhost:" + port + path;
     }
