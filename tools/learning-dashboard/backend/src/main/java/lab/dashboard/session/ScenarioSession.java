@@ -181,13 +181,28 @@ public class ScenarioSession {
     }
 
     /**
-     * dispatcher-flow 시나리오의 "요청 보내기" 버튼이 쓰는 경로 - 지금 실행 중인 시나리오의
-     * 임베디드 서버로 실제 HTTP 요청을 쏜다. 응답은 {@link ScenarioHttpResponseReceived}로
-     * 발행할 뿐, 여기서 기다리지 않는다 - 우리가 관심 있는 신호는 응답 자체가 아니라 그 요청이
-     * 지나가면서 찍는 JDI 히트들이다(step/play로 계속 관찰 중인 그 세션).
+     * dispatcher-flow/mvc-exception-priority 시나리오의 "요청 보내기" 버튼이 쓰는 경로 -
+     * 지금 메인 화면에서 실행 중인 시나리오의 임베디드 서버로 실제 HTTP 요청을 쏜다.
      */
     public void sendHttpRequest(String method, String path, String body) {
-        Running current = running.values().stream().findFirst().orElse(null);
+        sendHttpRequestTo(running.values().stream().findFirst().orElse(null), method, path, body);
+    }
+
+    /**
+     * docs/plan/04-dynamic-scenario-design.md 7번 절 "A/B 비교 실행" - 비교 화면 쪽의 "요청
+     * 보내기". {@link #sendHttpRequest}와 달리 대상이 둘 중 하나로 모호할 수 있으므로
+     * 이름으로 정확히 지정한다({@link #comparisonRunning}에서만 찾는다).
+     */
+    public void sendComparisonHttpRequest(String scenarioName, String method, String path, String body) {
+        sendHttpRequestTo(comparisonRunning.get(scenarioName), method, path, body);
+    }
+
+    /**
+     * 응답은 {@link ScenarioHttpResponseReceived}로 발행할 뿐, 여기서 기다리지 않는다 -
+     * 우리가 관심 있는 신호는 응답 자체가 아니라 그 요청이 지나가면서 찍는 JDI 히트들이다
+     * (step/play 또는 비교 화면의 자동 재생으로 계속 관찰 중인 그 세션).
+     */
+    private void sendHttpRequestTo(Running current, String method, String path, String body) {
         if (current == null) {
             return;
         }

@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchScenarios } from "../api/scenarioApi";
+import { DISPATCHER_FLOW_PRESETS, MVC_EXCEPTION_PRESETS, type Preset } from "../requestPresets";
 import { useDashboardSocket } from "../stomp/useDashboardSocket";
 import type { SavedScenario, ScenarioMessage, SemanticEvent } from "../types";
 import { RawEventLog } from "./RawEventLog";
+import { RequestPresets } from "./RequestPresets";
 import { SemanticEventLog } from "./SemanticEventLog";
+
+// dispatcher-flow/mvc-exception-priority는 사용자가 직접 HTTP 요청을 보내야 히트가
+// 진행된다(ScenarioVisualization과 같은 프리셋을 재사용) - 나머지 시나리오는 재생만으로
+// 끝까지 진행되므로 프리셋이 없다.
+const REQUEST_PRESETS_BY_NAME: Record<string, Preset[]> = {
+  "dispatcher-flow": DISPATCHER_FLOW_PRESETS,
+  "mvc-exception-priority": MVC_EXCEPTION_PRESETS,
+};
 
 interface Props {
   onClose: () => void;
@@ -88,7 +98,7 @@ export function ComparisonModal({ onClose }: Props) {
     [nameA, nameB],
   );
 
-  const { connected, startComparison, stopComparison } = useDashboardSocket(handleMessage);
+  const { connected, startComparison, stopComparison, sendComparisonHttpRequest } = useDashboardSocket(handleMessage);
 
   // 실제로 startComparison()에 넘긴 이름을 기억해 둔다(정지/언마운트 시점엔 select가 이미
   // 다른 값으로 바뀌었을 수 있으므로 state의 nameA/nameB를 그대로 믿을 수 없다).
@@ -207,6 +217,13 @@ export function ComparisonModal({ onClose }: Props) {
                   HIT {side.log.filter((e) => e.type === "hit").length}
                 </span>
               </div>
+              {started && REQUEST_PRESETS_BY_NAME[side.name] && (
+                <RequestPresets
+                  presets={REQUEST_PRESETS_BY_NAME[side.name]}
+                  disabled={!connected}
+                  onSend={(method, path, body) => sendComparisonHttpRequest(side.name, method, path, body)}
+                />
+              )}
               <div className="rail-section-head">
                 semantic events <span className="count">{side.semanticEvents.length}</span>
               </div>

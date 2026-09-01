@@ -81,5 +81,22 @@ export function useDashboardSocket(onMessage: (message: ScenarioMessage) => void
     });
   }, []);
 
-  return { connected, startScenario, sendCommand, sendHttpRequest, startComparison, stopComparison };
+  // 비교 화면 쪽의 "요청 보내기" - sendHttpRequest와 달리 대상이 A/B 둘 중 하나로 모호할
+  // 수 있으므로 name으로 정확히 지정한다.
+  const sendComparisonHttpRequest = useCallback((name: string, method: string, path: string, body?: string) => {
+    clientRef.current?.publish({
+      destination: "/app/scenario/comparison/http-request",
+      body: JSON.stringify({ name, method, path, body: body ?? null }),
+    });
+  }, []);
+
+  return {
+    connected,
+    startScenario,
+    sendCommand,
+    sendHttpRequest,
+    startComparison,
+    stopComparison,
+    sendComparisonHttpRequest,
+  };
 }

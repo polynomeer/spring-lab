@@ -65,6 +65,11 @@ public class ScenarioWebSocketController {
         session.stop(request.name());
     }
 
+    @MessageMapping("/scenario/comparison/http-request")
+    public void comparisonHttpRequest(ComparisonHttpRequestCommand request) {
+        session.sendComparisonHttpRequest(request.name(), request.method(), request.path(), request.body());
+    }
+
     private Optional<ScenarioDefinition> resolveOrError(String name) {
         Optional<ScenarioDefinition> definition = catalog.resolve(name);
         if (definition.isEmpty()) {
