@@ -1,6 +1,6 @@
-# spring-lab
+# spring-core-lab
 
-[![Build](https://github.com/polynomeer/spring-internals-lab/actions/workflows/build.yml/badge.svg)](https://github.com/polynomeer/spring-internals-lab/actions/workflows/build.yml)
+[![Build](https://github.com/polynomeer/spring-core-lab/actions/workflows/build.yml/badge.svg)](https://github.com/polynomeer/spring-core-lab/actions/workflows/build.yml)
 
 Spring Framework/Boot 내부 구조를 공식 문서·소스코드·디버깅으로 직접 확인하며, 핵심 추상화를 축소된 형태로 재구현해 보는 학습 저장소다. Spring을 블랙박스로 쓰는 대신, "왜 이렇게 동작하는가"를 실행 결과와 실제 릴리스 소스로 검증한다.
 

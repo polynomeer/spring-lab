@@ -18,7 +18,7 @@
 모든 기능을 하나의 거대한 프로젝트에 넣지 않고, 저장소 루트를 다음처럼 구성한다.
 
 ```text
-spring-internals-lab/
+spring-core-lab/
 ├── experiments/       # 실제 Spring으로 동작을 검증하는 코드
 ├── mini-spring/       # Spring 기능을 축소 구현하는 코드
 ├── spring-extensions/ # Spring 확장 포인트를 사용하는 코드

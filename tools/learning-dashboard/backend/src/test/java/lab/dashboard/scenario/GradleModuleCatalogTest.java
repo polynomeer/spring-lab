@@ -28,7 +28,7 @@ class GradleModuleCatalogTest {
     @Test
     void extractsModulePathsFromAMultilineIncludeBlock() throws IOException {
         writeSettings("""
-                rootProject.name = "spring-lab"
+                rootProject.name = "spring-core-lab"
 
                 include(
                     "experiments:ioc-container-lab",
@@ -45,7 +45,7 @@ class GradleModuleCatalogTest {
 
     @Test
     void returnsAnEmptyListWhenThereIsNoIncludeBlock() throws IOException {
-        writeSettings("rootProject.name = \"spring-lab\"\n");
+        writeSettings("rootProject.name = \"spring-core-lab\"\n");
 
         assertThat(GradleModuleCatalog.listModulePaths(repoRoot)).isEmpty();
     }
@@ -53,7 +53,7 @@ class GradleModuleCatalogTest {
     @Test
     void ignoresQuotedStringsOutsideTheIncludeBlock() throws IOException {
         writeSettings("""
-                rootProject.name = "spring-lab"
+                rootProject.name = "spring-core-lab"
 
                 include("experiments:ioc-container-lab")
 
@@ -67,7 +67,7 @@ class GradleModuleCatalogTest {
     @Test
     void readsToEndOfFileWhenTheIncludeBlockIsMissingItsClosingParenthesis() throws IOException {
         writeSettings("""
-                rootProject.name = "spring-lab"
+                rootProject.name = "spring-core-lab"
 
                 include(
                     "experiments:ioc-container-lab"

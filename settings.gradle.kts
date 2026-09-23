@@ -1,4 +1,4 @@
-rootProject.name = "spring-lab"
+rootProject.name = "spring-core-lab"
 
 include(
     "experiments:ioc-container-lab",
